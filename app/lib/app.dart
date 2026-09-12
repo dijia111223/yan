@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import 'src/core/launch_options.dart';
 import 'src/core/typography.dart';
 import 'src/state/workspace.dart';
 import 'src/state/workspace_scope.dart';
@@ -10,7 +10,10 @@ import 'src/ui/window_title.dart';
 
 /// 砚（Yan）——纯文件、本地优先的 Markdown 编辑器。
 class YanApp extends StatefulWidget {
-  const YanApp({super.key});
+  const YanApp({super.key, this.launchOptions = const LaunchOptions()});
+
+  /// 命令行启动参数（`--library` / `--open`），见 [LaunchOptions]。
+  final LaunchOptions launchOptions;
 
   @override
   State<YanApp> createState() => _YanAppState();
@@ -23,7 +26,7 @@ class _YanAppState extends State<YanApp> {
   @override
   void initState() {
     super.initState();
-    _state.bootstrap().whenComplete(() {
+    _state.bootstrap(launch: widget.launchOptions).whenComplete(() {
       if (mounted) setState(() => _ready = true);
     });
   }

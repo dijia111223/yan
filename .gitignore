@@ -1,3 +1,9 @@
-# ????????????????????"??????????"
+# Root-level ignores. Kept ASCII-only on purpose: this file gets read by many
+# tools, and Windows PowerShell 5.1 mangles non-ASCII when it rewrites files.
+
+# Temporary credential files written while pushing (safety net, never commit these)
 *cred*
 *gitcred*
+
+# Local packaging output (built by app/tool/package_windows.ps1)
+/dist/

@@ -173,6 +173,16 @@ let x = \$5
       expect(latexToUnicode(r'\lim_{x}'), 'limₓ');
       expect(latexToUnicode(r'\log_2 n'), 'log₂ n');
     });
+
+    test(r'\text{} 等文本模式按字面输出', () {
+      // 曾经把 \text{idx} 渲染成 "textidx"（命令名被当成字母输出）
+      expect(latexToUnicode(r'\text{idx}'), 'idx');
+      expect(latexToUnicode(r'\text{共享内存}'), '共享内存');
+      expect(latexToUnicode(r'\mathrm{d}x'), 'dx');
+      expect(latexToUnicode(r'\operatorname{argmax}'), 'argmax');
+      // 文本模式里可以嵌数学
+      expect(latexToUnicode(r'\text{共} n \text{个}'), '共 n 个');
+    });
   });
 
   group('MathExtractor.findPlaceholders', () {

@@ -135,6 +135,28 @@ String? latexToUnicode(String latex) {
       continue;
     }
 
+    // 文本模式：\text{...} / \mathrm{...} / \operatorname{...}
+    // 内容按字面输出（展开内部命令），例如 \text{idx} -> idx。
+    if (source.startsWith(r'\text', i) ||
+        source.startsWith(r'\mathrm', i) ||
+        source.startsWith(r'\operatorname', i) ||
+        source.startsWith(r'\mbox', i)) {
+      final cmdLength = source.startsWith(r'\operatorname', i)
+          ? r'\operatorname'.length
+          : source.startsWith(r'\mathrm', i)
+              ? r'\mathrm'.length
+              : source.startsWith(r'\mbox', i)
+                  ? r'\mbox'.length
+                  : r'\text'.length;
+      final arg = _readBraceArgument(source, i + cmdLength);
+      if (arg == null) return null;
+      final inner = latexToUnicode(arg.$1);
+      if (inner == null) return null;
+      out.write(inner);
+      i = arg.$2;
+      continue;
+    }
+
     // 其余反斜杠命令
     if (ch == r'\') {
       final match = _matchSymbol(source, i);

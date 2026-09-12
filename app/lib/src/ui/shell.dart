@@ -23,7 +23,12 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   double _sidebarWidth = 248;
-  double _previewWidth = 440;
+
+  /// 预览栏默认宽度。
+  ///
+  /// 440 太窄：表格、行间公式、代码块在预览里会被挤到需要横向滚动，
+  /// 三栏布局的价值就没了。620 在常见窗口宽度下能让正文有舒适的行长。
+  double _previewWidth = 620;
   bool _searchOpen = false;
 
   void _toggleSearch() => setState(() => _searchOpen = !_searchOpen);

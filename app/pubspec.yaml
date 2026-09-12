@@ -1,0 +1,53 @@
+name: yan_note
+description: "砚（Yan）— HarmonyOS NEXT 上的开源纯文件本地优先 Markdown 编辑器。"
+publish_to: "none"
+
+# 版本号：MAJOR.MINOR.PATCH+BUILD
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # --- Markdown 解析与预览（GFM：表格 / 任务列表 / 删除线 / 自动链接）---
+  markdown: ^7.3.1
+  flutter_markdown: ^0.7.7+1
+
+  # --- LaTeX 公式渲染 ---
+  flutter_math_fork: ^0.7.4
+
+  # --- 库选择：桌面用原生目录对话框，Android 走 SAF ---
+  file_picker: ^12.3.0
+
+  # --- frontmatter（YAML）读写：raw 保留 + 字段级编辑 ---
+  yaml: ^3.1.4
+  yaml_edit: ^2.2.4
+
+  # --- 路径处理 ---
+  path: ^1.9.1
+
+  # --- UI 状态持久化（宪章：SQLite 只存最近打开列表等 UI 状态；此处用平台偏好存储）---
+  shared_preferences: ^2.5.5
+
+  # --- 打开外部链接 ---
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # 端到端测试：在**真实 Windows 应用**里驱动界面（`flutter test integration_test`）
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # 库示例：首次启动可作为"试用文件夹"打开的示例笔记
+  assets:
+    - assets/sample/

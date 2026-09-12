@@ -1,0 +1,37 @@
+# Flutter / Dart (ASCII-only on purpose: this file is read by many tools)
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Generated platform glue
+**/generated_plugin_registrant.*
+windows/flutter/ephemeral/
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+
+# HarmonyOS (added when the OHOS port lands)
+ohos/oh_modules/
+ohos/.hvigor/
+ohos/build/
+ohos/local.properties
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor scratch files written by Yan's atomic save
+*.yan-tmp

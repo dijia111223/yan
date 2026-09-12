@@ -1,0 +1,18 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # 让我们自己的疏忽直接建模为错误，而不是警告
+    unused_import: error
+    unused_local_variable: error
+    dead_code: error
+  exclude:
+    - build/**
+    - android/**
+    - windows/**
+
+linter:
+  rules:
+    - prefer_single_quotes
+    - require_trailing_commas
+    - always_declare_return_types

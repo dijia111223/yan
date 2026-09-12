@@ -64,12 +64,31 @@
 
 ## 快速开始
 
+### 直接下载（Windows x64，免安装）
+
+**[⬇ 下载 `yan-0.1.0-windows-x64.zip`](https://github.com/dijia111223/yan/releases/download/v0.1.0/yan-0.1.0-windows-x64.zip)** · [全部版本](https://github.com/dijia111223/yan/releases)
+
+解压后双击 `yan_note.exe` 即可，**已附带 MSVC 运行库，无需安装任何东西**。
+想先看效果，可以把 `data/flutter_assets/assets/sample` 当作库打开（内置示例笔记）。
+
+也可以从命令行直接打开库或笔记：
+
+```bat
+yan_note.exe --library "D:\我的笔记"
+yan_note.exe --library "D:\我的笔记" --open "D:\我的笔记\某篇.md"
+yan_note.exe "D:\我的笔记\某篇.md"
+```
+
+### 从源码构建
+
 ```bash
 cd app
 flutter pub get
 pwsh -File tool/prepare_windows_plugins.ps1   # 仅 Windows，且未开开发者模式时需要
 flutter run -d windows
 ```
+
+打包免安装 zip：`powershell -File app/tool/package_windows.ps1`
 
 详细步骤、快捷键、构建说明见 [`app/README.md`](app/README.md)。
 

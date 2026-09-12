@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/frontmatter.dart';
+import '../core/launch_options.dart';
 import '../core/library.dart';
 import '../core/markdown_theme.dart';
 import '../core/math_text.dart';
@@ -178,8 +179,8 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 生命周期
 
-  /// 启动：读取偏好，并恢复上次打开的库与标签页。
-  Future<void> bootstrap() async {
+  /// 启动：读取偏好，恢复上次的库与标签页；命令行参数优先于历史状态。
+  Future<void> bootstrap({LaunchOptions launch = const LaunchOptions()}) async {
     try {
       _prefs = await SharedPreferences.getInstance();
     } on Exception {
@@ -199,21 +200,45 @@ class WorkspaceState extends ChangeNotifier {
         orElse: () => LibrarySort.nameAsc,
       );
 
-      final lastLibrary = prefs.getString(_kLibrary);
+      // 要打开的库：命令行 > 上次会话
+      final lastLibrary = launch.libraryPath ?? prefs.getString(_kLibrary);
       if (lastLibrary != null && Directory(lastLibrary).existsSync()) {
-        await openFolder(lastLibrary, remember: false);
-        final tabs = prefs.getStringList(_kOpenTabs) ?? <String>[];
-        for (final tab in tabs) {
+        await openFolder(lastLibrary, remember: launch.libraryPath == null);
+
+        // 要打开的笔记：命令行指定的话就用它，否则恢复上次的标签
+        final toOpen = launch.openFiles.isNotEmpty
+            ? launch.openFiles
+            : (prefs.getStringList(_kOpenTabs) ?? <String>[]);
+        // 命令行只给了笔记、没给库时，把笔记所在目录当库
+        if (!hasLibrary && toOpen.isNotEmpty) {
+          final dir = p.dirname(toOpen.first);
+          if (Directory(dir).existsSync()) {
+            await openFolder(dir);
+          }
+        }
+        for (final tab in toOpen) {
           if (File(tab).existsSync()) {
             await openFile(tab, activate: false);
           }
         }
-        final activeTab = prefs.getString(_kActiveTab);
+
+        final activeTab = launch.openFiles.isNotEmpty
+            ? launch.openFiles.last
+            : prefs.getString(_kActiveTab);
         if (activeTab != null) {
           final index = _documents.indexWhere((d) => d.path == activeTab);
           if (index >= 0) _activeIndex = index;
         }
         if (_documents.isNotEmpty && _activeIndex < 0) _activeIndex = 0;
+      }
+    } else if (launch.openFiles.isNotEmpty) {
+      // 连偏好存储都不可用时，仍要尽力满足命令行请求
+      final dir = p.dirname(launch.openFiles.first);
+      if (Directory(dir).existsSync()) {
+        await openFolder(dir);
+        for (final tab in launch.openFiles) {
+          if (File(tab).existsSync()) await openFile(tab);
+        }
       }
     }
     notifyListeners();
@@ -754,19 +779,26 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 预览 / 公式
 
-  /// 预览渲染用的 Markdown（公式已替换为占位符）。
+  /// 预览渲染用的 Markdown（frontmatter 已剥离，公式已替换为占位符）。
   String previewSourceFor(OpenDocument doc) => _extractionFor(doc).markdown;
 
   /// 预览公式表。
   Map<String, MathFragment> mathFragmentsFor(OpenDocument doc) => _extractionFor(doc).fragments;
 
   /// 公式提取结果缓存：同一份内容只扫描一次。
+  ///
+  /// **frontmatter 必须先剥掉再交给 Markdown 渲染器**：
+  /// frontmatter 的分隔符 `---` 在 Markdown 里是「分隔线」或「setext 标题下划线」，
+  /// 直接渲染会把整块元数据当成正文显示（表现为预览顶部出现一段
+  /// `title: … tags: …` 的正文）。frontmatter 交给 frontmatter 面板负责，
+  /// 预览只渲染正文。
   MathExtraction _extractionFor(OpenDocument doc) {
     final content = doc.content;
     final hash = content.hashCode;
     final cached = _mathCache[doc.path];
     if (cached != null && cached.hash == hash) return cached.extraction;
-    final extraction = MathExtractor.extract(content);
+    final body = FrontmatterCodec.parse(content).body;
+    final extraction = MathExtractor.extract(body);
     _mathCache[doc.path] = (hash: hash, extraction: extraction);
     return extraction;
   }

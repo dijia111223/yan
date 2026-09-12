@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../core/latex_to_unicode.dart';
 import '../core/markdown_theme.dart';
 import '../core/math_text.dart';
 
@@ -384,7 +385,7 @@ class CodeHighlighter {
   }
 }
 
-/// 行间公式组件。渲染失败时优雅退化为等宽文本（绝不红屏）。
+/// 行间公式组件。渲染失败时优雅退化为可读文本（绝不红屏）。
 class _Formula extends StatelessWidget {
   const _Formula({required this.tex, required this.theme});
 
@@ -393,13 +394,16 @@ class _Formula extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 兜底：渲染不了时把公式**转成 Unicode 可读文本**，
+    // 而不是原样吐 LaTeX 源码——后者对用户几乎没有价值。
+    final readable = latexToUnicode(tex) ?? tex;
     final fallback = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: theme.inlineCodeBackground,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text('\$\$$tex\$\$', style: theme.math),
+      child: Text(readable, style: theme.math.copyWith(fontSize: 15)),
     );
 
     return Center(

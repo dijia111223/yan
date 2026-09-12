@@ -221,6 +221,26 @@ $$
     // LaTeX 提取本身的正确性由 math_text_test 覆盖。
     expect(find.byType(Math), findsWidgets);
     expect(find.textContaining('YANMATH'), findsNothing);
+
+    // frontmatter 绝不能被当成正文渲染进预览。
+    // 曾经的缺陷：预览直接渲染整份文件，`---` 被 Markdown 当作分隔线，
+    // 于是 `title: 贝塔` 这一整块元数据以正文形式出现在预览顶部。
+    //
+    // 注意断言范围：源码编辑器里**本来就有** frontmatter（源码模式理应原样显示），
+    // 所以不能对整棵控件树用 find.textContaining('title:')——那会命中编辑器。
+    // 这里直接断言"交给预览渲染的那份 Markdown"。
+    //
+    // 也不能简单断言"不含 ---"：Markdown 的分隔线与**表格分隔行**（| --- | --- |）
+    // 都含它，那是正文的一部分。要断言的是"不以 frontmatter 开头"。
+    final previewSource = state.previewSourceFor(state.activeDocument!);
+    expect(previewSource.startsWith('---'), isFalse,
+        reason: '预览源不应以 frontmatter 分隔符开头');
+    expect(previewSource.contains('title: 贝塔'), isFalse);
+    expect(previewSource.contains('tags: [测试]'), isFalse);
+    expect(previewSource.contains('created: 2026-09-09'), isFalse);
+    // 正文与表格必须完整保留
+    expect(previewSource.contains('贝塔笔记'), isTrue, reason: '正文必须保留');
+    expect(previewSource.contains('| --- | --- |'), isTrue, reason: '表格分隔行必须保留');
   });
 
   testWidgets('frontmatter 面板可打开、显示规范化字段并插入模板', (tester) async {

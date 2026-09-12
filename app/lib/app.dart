@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'src/core/typography.dart';
 import 'src/state/workspace.dart';
 import 'src/state/workspace_scope.dart';
 import 'src/ui/shell.dart';
@@ -38,7 +39,7 @@ class _YanAppState extends State<YanApp> {
 
   ThemeData _theme(Brightness brightness) {
     final scheme = ColorScheme.fromSeed(seedColor: _seed, brightness: brightness);
-    return ThemeData(
+    final base = ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
       visualDensity: VisualDensity.compact,
@@ -49,6 +50,8 @@ class _YanAppState extends State<YanApp> {
       ),
       tooltipTheme: const TooltipThemeData(waitDuration: Duration(milliseconds: 500)),
     );
+    // 全应用字体统一为黑体（见 core/typography.dart）
+    return AppFonts.apply(base);
   }
 
   @override

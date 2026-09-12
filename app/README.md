@@ -182,6 +182,8 @@ flutter test
 | `markdown_highlighter_test.dart` | **高亮不丢字**（逐字符比对）、各语义着色、超长文本退化、跳行不改正文 |
 | `library_and_search_test.dart` | 真实磁盘读写、排序、跳过规则、重名处理、搜索排序与命中位置 |
 | `app_smoke_test.dart` | 真实磁盘库 + 真实界面：打开库 → 点文件 → 编辑 → 自动落盘 → 预览渲染 → frontmatter 面板 → 搜索跳转 → 浅深色切换 |
+| `integration_test/font_check_test.dart` | 在**真实 Windows 应用**里核验字体：黑体是否真被解析（宽度指纹法，防止静默回落）、等宽字体是否真等宽、两者是否互相污染 |
+| `integration_test/app_e2e_test.dart` | 在**真实 Windows 应用**里跑完整链路：打开库 → 打开笔记 → 编辑落盘 → 预览表格与公式 → 搜索跳转 |
 
 ### 2. 端到端测试（跑在真实 Windows 应用里）
 
@@ -210,6 +212,13 @@ flutter test integration_test -d windows
   转成 Unicode 文本反而渲染确定、零字体依赖。**看不懂的公式原样保留 LaTeX**，绝不硬猜。
 - **为什么配置不用 SQLite**：要存的东西只有"库路径 / 打开的标签 / 分栏开关"这几个键值，
   用平台偏好存储足够；更重要的是，**笔记内容永远不经过任何数据库**。
+- **字体为什么不是"全部统一成一种"**：正文与界面统一为**黑体**（Windows 上族名 `SimHei`，
+  非 Windows 走回落链到系统无衬线字体，都是黑体风格）；但代码块、frontmatter 源码、公式源码
+  **保留等宽字体**——等宽是代码可读性的硬需求（对齐、缩进、字符宽度一致），换成比例字体
+  排版就散了。字体定义集中在 `lib/src/core/typography.dart`，只此一处。
+- **为什么不用 `fontFamily: 'monospace'` 这个泛型名**：实测在 Windows 上它**解析不到**，
+  引擎会静默回落到 CJK 字体，于是拉丁字母被排成全角、代码缩进全乱。因此改用具体族名
+  `Consolas` 并给出跨平台回落链。
 - **保存怎么保证不写坏文件**：优先"临时文件 + 重命名"（避免断电留下半截文件）；
   但在 Windows 上目标被占用时重命名会失败，此时**退回直接覆写**——先保住用户的字。
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/frontmatter.dart';
+import '../core/typography.dart';
 import '../state/workspace.dart';
 
 /// frontmatter 读写面板。
@@ -156,7 +157,8 @@ class _RawEditorView extends StatelessWidget {
               maxLines: null,
               expands: true,
               textAlignVertical: TextAlignVertical.top,
-              style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace', height: 1.55),
+              // YAML 源码用等宽字体，方便对齐与缩进
+              style: AppFonts.monoStyle(theme.textTheme.bodySmall).copyWith(height: 1.55),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 isDense: true,

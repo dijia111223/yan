@@ -4,7 +4,13 @@ import 'package:flutter/material.dart';
 ///
 /// 为什么单独成文件：字体名一旦散落在各处，改一次要翻遍全工程，还容易漏。
 /// 这里集中定义，`markdown_theme.dart` / `app.dart` / 各面板都从这里取。
-abstract final class AppFonts {
+///
+/// 为什么不用 `abstract final class`：那是 Dart 3.9 才有的语法，而鸿蒙那条线用的
+/// Flutter 3.27.4 只带 Dart 3.6。改成"私有构造 + 全静态成员"，语义一致
+/// （不可实例化、不可继承），但兼容 Dart 3.0+ —— 同一份代码同时能编 Windows 与鸿蒙。
+class AppFonts {
+  const AppFonts._();
+
   /// 正文与界面字体：**黑体**。
   ///
   /// 黑体是中文正文最稳的选择：字形方正、屏幕上笔画均匀、没有宋体的衬线退化问题。

@@ -126,34 +126,42 @@ class _FormatBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      height: 34,
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Row(
-        children: <Widget>[
-          _btn(context, Icons.title_rounded, '一级标题', '# '),
-          _btn(context, Icons.format_bold_rounded, '粗体  **粗体**', '**粗体**'),
-          _btn(context, Icons.format_italic_rounded, '斜体  *斜体*', '*斜体*'),
-          _btn(context, Icons.strikethrough_s_rounded, '删除线  ~~文本~~', '~~文本~~'),
-          _btn(context, Icons.code_rounded, '行内代码  `code`', '`code`'),
-          _btn(context, Icons.data_object_rounded, '代码块', '\n```dart\n\n```\n'),
-          _btn(context, Icons.link_rounded, '链接', '[标题](https://)'),
-          _btn(context, Icons.image_outlined, '图片', '![说明](图片路径)'),
-          _btn(context, Icons.format_quote_rounded, '引用', '> '),
-          _btn(context, Icons.checklist_rounded, '任务列表', '- [ ] 待办\n'),
-          _btn(context, Icons.table_chart_outlined, '表格', _tableSnippet),
-          _btn(context, Icons.functions_rounded, '行内公式', r'$E = mc^2$'),
-          _btn(
-            context,
-            Icons.integration_instructions_rounded,
-            '行间公式',
-            '\n${r'$$'}\n${r'\int_0^1 x^2\,dx'}\n${r'$$'}\n',
-          ),
-          _btn(context, Icons.horizontal_rule_rounded, '分隔线', '\n---\n'),
-        ],
+      // 横向可滚动，而不是固定 Row。
+      //
+      // 工具条有 14 个按钮；当三栏全开、frontmatter 面板也打开时，编辑器宽度可能只剩
+      // 400 多像素，固定 Row 会溢出（实测溢出 122 px）并在界面上画出黄黑警示条。
+      // 常见编辑器（VS Code / Typora）也都是让工具栏滚动或折叠，而不是让它溢出。
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(
+          children: <Widget>[
+            _btn(context, Icons.title_rounded, '一级标题', '# '),
+            _btn(context, Icons.format_bold_rounded, '粗体  **粗体**', '**粗体**'),
+            _btn(context, Icons.format_italic_rounded, '斜体  *斜体*', '*斜体*'),
+            _btn(context, Icons.strikethrough_s_rounded, '删除线  ~~文本~~', '~~文本~~'),
+            _btn(context, Icons.code_rounded, '行内代码  `code`', '`code`'),
+            _btn(context, Icons.data_object_rounded, '代码块', '\n```dart\n\n```\n'),
+            _btn(context, Icons.link_rounded, '链接', '[标题](https://)'),
+            _btn(context, Icons.image_outlined, '图片', '![说明](图片路径)'),
+            _btn(context, Icons.format_quote_rounded, '引用', '> '),
+            _btn(context, Icons.checklist_rounded, '任务列表', '- [ ] 待办\n'),
+            _btn(context, Icons.table_chart_outlined, '表格', _tableSnippet),
+            _btn(context, Icons.functions_rounded, '行内公式', r'$E = mc^2$'),
+            _btn(
+              context,
+              Icons.integration_instructions_rounded,
+              '行间公式',
+              '\n${r'$$'}\n${r'\int_0^1 x^2\,dx'}\n${r'$$'}\n',
+            ),
+            _btn(context, Icons.horizontal_rule_rounded, '分隔线', '\n---\n'),
+          ],
+        ),
       ),
     );
   }

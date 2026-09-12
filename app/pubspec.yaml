@@ -6,7 +6,10 @@ publish_to: "none"
 version: 0.1.0+1
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
+  # 下界压到 3.6：鸿蒙那条线用的 Flutter 3.27.4 自带 Dart 3.6.2，
+  # 而桌面版用的是 Flutter 3.47 / Dart 3.13。同一份代码要能同时编两端，
+  # 所以下界取两者中更低的一方（代码里也相应地避开了 Dart 3.9+ 的语法）。
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -14,36 +17,45 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  # 依赖版本策略
+  # --------------
+  # 下界取"代码实际用到的 API 首次出现的版本"，上界放开，让 pub 求解器在**各端各自的
+  # Dart 版本**下自动挑最高的兼容版本：
+  #   * 桌面（Flutter 3.47 / Dart 3.13）→ 取最新
+  #   * 鸿蒙（Flutter 3.27.4 / Dart 3.6）→ 自动降到仍兼容 3.6 的最高版本
+  # 因此这里刻意不写死宽松范围（如 ^7.3.1），否则鸿蒙端会因 `requires SDK ^3.9.0` 而求解失败。
+
   # --- Markdown 解析与预览（GFM：表格 / 任务列表 / 删除线 / 自动链接）---
-  markdown: ^7.3.1
-  flutter_markdown: ^0.7.7+1
+  markdown: ">=7.2.0 <8.0.0"
+  flutter_markdown: ">=0.7.0 <0.8.0"
 
   # --- LaTeX 公式渲染 ---
-  flutter_math_fork: ^0.7.4
+  flutter_math_fork: ">=0.7.0 <0.8.0"
 
   # --- 库选择：桌面用原生目录对话框，Android 走 SAF ---
-  file_picker: ^12.3.0
+  file_picker: ">=8.0.0 <13.0.0"
 
   # --- frontmatter（YAML）读写：raw 保留 + 字段级编辑 ---
-  yaml: ^3.1.4
-  yaml_edit: ^2.2.4
+  yaml: ">=3.1.0 <4.0.0"
+  yaml_edit: ">=2.2.0 <3.0.0"
 
   # --- 路径处理 ---
-  path: ^1.9.1
+  path: ">=1.9.0 <2.0.0"
 
   # --- UI 状态持久化（宪章：SQLite 只存最近打开列表等 UI 状态；此处用平台偏好存储）---
-  shared_preferences: ^2.5.5
+  shared_preferences: ">=2.3.0 <3.0.0"
 
   # --- 打开外部链接 ---
-  url_launcher: ^6.3.2
+  url_launcher: ">=6.2.0 <7.0.0"
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  # 端到端测试：在**真实 Windows 应用**里驱动界面（`flutter test integration_test`）
-  integration_test:
-    sdk: flutter
-  flutter_lints: ^6.0.0
+  # 注意：这里**刻意不放 integration_test**。
+  # 鸿蒙用的 Flutter fork 自报版本号是 `0.0.0-unknown`，而 integration_test 要求
+  # Flutter >=3.18，于是它在鸿蒙那条线上会让整个 pub 求解失败。
+  # 桌面端要跑集成测试时，用 tool/with_integration_test.ps1 临时加上即可。
+  flutter_lints: ">=5.0.0 <7.0.0"
 
 flutter:
   uses-material-design: true

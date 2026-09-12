@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'typography.dart';
+
 /// Markdown 源码高亮的配色与字形。
 ///
 /// 深浅两套预设，与 App 主题同步切换。
@@ -101,15 +103,28 @@ class MarkdownTheme {
       decoration: TextDecoration.lineThrough,
     ),
     inlineCode: TextStyle(
-      fontFamily: 'monospace',
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
       fontSize: 13.5,
       color: Color(0xFF9C2A6B),
       backgroundColor: Color(0xFFF1F2F6),
     ),
     inlineCodeBackground: Color(0xFFF1F2F6),
-    codeBlock: TextStyle(fontFamily: 'monospace', fontSize: 13.5, height: 1.6, color: Color(0xFF2C3138)),
+    codeBlock: TextStyle(
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
+      fontSize: 13.5,
+      height: 1.6,
+      color: Color(0xFF2C3138),
+    ),
     codeBlockBackground: Color(0xFFF6F7F9),
-    codeFence: TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.6, color: Color(0xFF9AA3B2)),
+    codeFence: TextStyle(
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
+      fontSize: 13,
+      height: 1.6,
+      color: Color(0xFF9AA3B2),
+    ),
     link: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF1A6FE0), decoration: TextDecoration.underline),
     linkUrl: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF7A879C)),
     quote: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF5A6472), fontStyle: FontStyle.italic),
@@ -121,7 +136,13 @@ class MarkdownTheme {
     frontmatterComment: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF8A93A0), fontStyle: FontStyle.italic),
     frontmatterFence: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFFB9C1CE)),
     tableDelimiter: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF9AA3B2), fontWeight: FontWeight.w700),
-    math: TextStyle(fontFamily: 'monospace', fontSize: 14, height: 1.7, color: Color(0xFF6A3FB5)),
+    math: TextStyle(
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
+      fontSize: 14,
+      height: 1.7,
+      color: Color(0xFF6A3FB5),
+    ),
   );
 
   static const MarkdownTheme dark = MarkdownTheme(
@@ -152,15 +173,28 @@ class MarkdownTheme {
       decoration: TextDecoration.lineThrough,
     ),
     inlineCode: TextStyle(
-      fontFamily: 'monospace',
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
       fontSize: 13.5,
       color: Color(0xFFF08BC0),
       backgroundColor: Color(0xFF272B33),
     ),
     inlineCodeBackground: Color(0xFF272B33),
-    codeBlock: TextStyle(fontFamily: 'monospace', fontSize: 13.5, height: 1.6, color: Color(0xFFC8D1DE)),
+    codeBlock: TextStyle(
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
+      fontSize: 13.5,
+      height: 1.6,
+      color: Color(0xFFC8D1DE),
+    ),
     codeBlockBackground: Color(0xFF1E2229),
-    codeFence: TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.6, color: Color(0xFF6C7686)),
+    codeFence: TextStyle(
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
+      fontSize: 13,
+      height: 1.6,
+      color: Color(0xFF6C7686),
+    ),
     link: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF6FA8FF), decoration: TextDecoration.underline),
     linkUrl: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF7E8899)),
     quote: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFFA5AEBC), fontStyle: FontStyle.italic),
@@ -172,6 +206,12 @@ class MarkdownTheme {
     frontmatterComment: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF78818F), fontStyle: FontStyle.italic),
     frontmatterFence: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF545E6D)),
     tableDelimiter: TextStyle(fontSize: 15, height: 1.7, color: Color(0xFF6C7686), fontWeight: FontWeight.w700),
-    math: TextStyle(fontFamily: 'monospace', fontSize: 14, height: 1.7, color: Color(0xFFC79BFF)),
+    math: TextStyle(
+      fontFamily: AppFonts.mono,
+      fontFamilyFallback: AppFonts.monoFallback,
+      fontSize: 14,
+      height: 1.7,
+      color: Color(0xFFC79BFF),
+    ),
   );
 }

@@ -35,3 +35,6 @@ desktop.ini
 
 # Editor scratch files written by Yan's atomic save
 *.yan-tmp
+
+# Flutter tool crash logs (written on tool crashes; never commit)
+flutter_*.log

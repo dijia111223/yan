@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../state/workspace.dart';
 import '../state/workspace_scope.dart';
 import 'platform_file_picker.dart';
-
+import 'window_title.dart';
 /// 没有库时显示的欢迎页。
 class WelcomeView extends StatelessWidget {
   const WelcomeView({super.key});
@@ -73,25 +74,25 @@ class WelcomeView extends StatelessWidget {
                           child: Text(line, style: theme.textTheme.bodySmall),
                         ),
                       const SizedBox(height: 16),
-                      Row(
-                        children: <Widget>[
-                          FilledButton.icon(
-                            onPressed: () async {
-                              try {
-                                final path = await pickDirectoryPath();
-                                if (path == null) return;
-                                await state.openFolder(path);
-                              } on DirectoryPickException catch (e) {
-                                state.showToast(e.message);
-                              }
-                            },
-                            icon: const Icon(Icons.folder_open_rounded, size: 17),
-                            label: const Text('打开文件夹作为库'),
-                          ),
-                          const SizedBox(width: 10),
-                          Text('或按 Ctrl+O', style: theme.textTheme.labelSmall),
-                        ],
-                      ),
+                      // 触屏平台没有 Ctrl，且按钮本身已经够宽，提示只会挤掉它；只在桌面显示
+                      if (WindowTitle.supported) ...<Widget>[
+                        Row(
+                          children: <Widget>[
+                            FilledButton.icon(
+                              onPressed: () => _pickAndOpen(context, state),
+                              icon: const Icon(Icons.folder_open_rounded, size: 17),
+                              label: const Text('打开文件夹作为库'),
+                            ),
+                            const SizedBox(width: 10),
+                            Text('或按 Ctrl+O', style: theme.textTheme.labelSmall),
+                          ],
+                        ),
+                      ] else
+                        FilledButton.icon(
+                          onPressed: () => _pickAndOpen(context, state),
+                          icon: const Icon(Icons.folder_open_rounded, size: 17),
+                          label: const Text('打开文件夹作为库'),
+                        ),
                     ],
                   ),
                 ),
@@ -117,5 +118,15 @@ class WelcomeView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static Future<void> _pickAndOpen(BuildContext context, WorkspaceState state) async {
+    try {
+      final path = await pickDirectoryPath();
+      if (path == null) return;
+      await state.openFolder(path);
+    } on DirectoryPickException catch (e) {
+      state.showToast(e.message);
+    }
   }
 }

@@ -41,7 +41,11 @@ class _ShellState extends State<Shell> {
         actions: _actions(state),
         child: Focus(
           autofocus: true,
-          child: Scaffold(            body: Column(
+          child: Scaffold(
+            // 鸿蒙手机默认全屏（引擎里 isDefaultFullScreen() 对非 2in1 设备返回 true），
+            // 内容会画到状态栏/导航栏下面，必须靠 SafeArea 避让，否则顶栏与系统栏重叠。
+            body: SafeArea(
+              child: Column(
               children: <Widget>[
                 _TopBar(
                   state: state,
@@ -90,6 +94,7 @@ class _ShellState extends State<Shell> {
                 Container(height: 1, color: scheme.outlineVariant),
                 StatusBar(state: state),
               ],
+              ),
             ),
           ),
         ),

@@ -24,15 +24,47 @@
 
 ---
 
-## 二、探针做法（不用 CMake）
+## 二、探针做法（逐文件编译）
 
 `build_llama_ohos.ps1`：直接用 OHOS clang 逐文件编译，再由 `link_probe.ps1` 链接。
 改探针本身时用 `rebuild_probe.ps1` —— 只重编探针那一个文件再重链，不必全量重跑。
 
-**为什么不用 CMake**：llama.cpp 仓库没有 `ohos.toolchain.cmake`。自造 toolchain 后
+**为什么探针不用 CMake**：llama.cpp 仓库没有 `ohos.toolchain.cmake`。自造 toolchain 后
 CMake 会崩在编译器 ABI 探测阶段（`0xC0000409`）—— 它要**运行**探测产物，
 而 OHOS ELF 在 Windows 上跑不起来。设 `CMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`
 也没绕过。逐文件编译虽土，但可控、可复现、报错清楚。
+
+### 但集成进应用时必须用 CMake —— 而且可行
+
+上面那个崩溃**是自造 toolchain 造成的，不是 CMake 的锅**。DevEco SDK 自带官方
+toolchain，用它可以正常交叉编译：
+
+```
+<DevEco SDK>\default\openharmony\native\build\cmake\ohos.toolchain.cmake
+```
+
+实测：官方 toolchain 下 CMake 配置 1–2 秒完成、ABI 探测正常、产出 AArch64 共享库。
+
+这一点是集成的前提，因为 **hvigor 编译 HAR 时走的就是 CMake** —— `plugin_ffi`
+模板的 `build-profile.json5` 里：
+
+```json5
+"buildOption": {
+  "externalNativeOptions": { "path": "../src/CMakeLists.txt" }
+}
+```
+
+所以集成路径是：**FFI 插件（HAR）→ `externalNativeOptions` → 我们的 CMakeLists
+→ `libyan_ai.so` → Dart 侧 `DynamicLibrary.open('libyan_ai.so')`**。
+ohos Flutter fork 的 `plugin_ffi` Dart 模板里 `Platform.isOhos` 分支是现成的。
+
+用 CMake 还必须显式指定 C++ 标准，否则报 `no template named 'is_same_v'`：
+
+```cmake
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11)
+```
 
 ---
 
@@ -139,11 +171,35 @@ OHOS 的 clang 定义了 `__linux__`，于是 llama.cpp 里
 
 ### 5.3 源文件清单要递归、要按架构裁剪、键要唯一
 
-- `common/` **有子目录**（`common/parsers/`、`common/jinja/`）。只扫顶层会漏，
+这一类错误**全是静默的** —— 编译不报错，只在链接期缺符号、或者换一个模型才炸。
+
+- `src/` **有子目录**，且 `src/models/` 下有 **150+ 个模型架构实现**。只扫顶层会漏掉它们。
+  危险之处在于**漏了不一定立刻发现**：模型注册表靠静态初始化，Qwen3 的实现恰好是顶层的
+  `qwen3.cpp`，所以"只测 Qwen3"时看不出问题 —— 换成 Llama、Gemma 任何别的架构才会崩。
+  实测：修递归前 aarch64 只编 **107** 个文件，修后 **260** 个
+
+  ```powershell
+  # 错：只扫顶层
+  Get-ChildItem "$LlamaSrc\src" -Filter '*.cpp' | ...
+  # 对：递归
+  Get-ChildItem "$LlamaSrc\src" -Filter '*.cpp' -Recurse | ...
+  ```
+
+- `common/` **也有子目录**（`common/parsers/`、`common/jinja/`）。只扫顶层会漏，
   链接报一堆 `undefined symbol`
 - `ggml-cpu/arch/` 按架构分目录；`ggml-cpu/spacemit/`、`kleidiai/`、`hexagon/`
   是**独立顶层目录**。这些只针对特定硬件，混编会有约 10 个**必然失败**
 - 目标文件名要用**相对路径**做键：`arm/quants.c` 与 `x86/quants.c` 同名，只用 basename 会互相覆盖
+- **扩展名必须保留在键里**：`ggml-cpu.c` 与 `ggml-cpu.cpp` 去掉扩展名后同名，
+  只留一个会让另一个**永远不参与编译**。aarch64 就是这样丢了 `gguf.cpp`、
+  `ggml-backend-dl.cpp`、`ggml-backend-meta.cpp`、`ggml-cpu.c`，
+  链接期报 `undefined symbol: gguf_init_from_file`。把扩展名的点也换成连字符即可：
+
+  ```powershell
+  $key = ($rel -replace '[\\/]', '-') -replace '\.(c|cpp)$', '-$1'
+  ```
+
+**改完命名规则必须清空产物目录重编**，否则新旧目标文件名混在一起，链接会取到旧的那批。
 
 ### 5.4 头文件遮蔽（最坑的一个，两个都是同名头）
 
@@ -165,13 +221,39 @@ OHOS 的 clang 定义了 `__linux__`，于是 llama.cpp 里
   `--sysroot=C:/Program Files/...` 被按空格拆成多个参数
 - **长命令会被超时打断**：链接要十几分钟，内联长命令会被 kill。
   用参数文件 + `Start-Process` 脱离方式更稳
+- **PowerShell 5.1 不支持三元运算符 `? :`**，会报 `Unexpected token '?'`
+- **`ForEach-Object` 块里的 `return` 只结束当前迭代**，但它与 `$script:` 计数器、
+  新建文件的枚举顺序掺在一起时行为很难推理 —— 这种"逐个改文件并回读确认"的活
+  直接用 `foreach` 循环写，可读且确定
+- **`$PSScriptRoot` 在 `powershell -File` 下可能为空**，脚本会静默地只处理当前目录。
+  用 `Split-Path -Parent $MyInvocation.MyCommand.Path` 兜底
 
-### 5.6 必须硬失败
+### 5.6 含中文的 `.ps1` 丢了 BOM，报错完全指向别处
+
+Windows PowerShell 5.1 在没有 BOM 时按**系统 ANSI 代码页**（简体中文为 GBK）读脚本。
+中文变乱码，而**乱码里恰好含引号就会破坏语法**：
+
+```
+Write-Host "鏈?$($failed.Count) 涓簮鏂囦欢鏈紪杩囷紝鍚庣画閾炬帴蹇呯劧澶辫触锛? -ForegroundColor ...
+The string is missing the terminator: ".
+```
+
+报的是"字符串没结束"，看着像引号配对写错了，实际原因在文件编码。
+
+**更麻烦的是编辑工具写入时会丢掉 BOM** —— 每次改完脚本都要补，否则下次运行必炸。
+`fix_ps1_bom.ps1` 负责这件事（逐个回读确认，不凭"写过了"就认为成功）：
+
+```powershell
+$text = [System.IO.File]::ReadAllText($f, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText($f, $text, (New-Object System.Text.UTF8Encoding($true)))
+```
+
+### 5.7 必须硬失败
 
 脚本一开始"107/116 成功"看着还行，实际链接报一堆 undefined symbol ——
 排查成本远高于一开始就报错。现在任何源文件编不过都 `exit 1`。
 
-### 5.7 双 BOS：套了 chat 模板就不能再 `add_special`
+### 5.8 双 BOS：套了 chat 模板就不能再 `add_special`
 
 最隐蔽的一个。分词时 `add_special=true` 会加 BOS，而 chat 模板输出里**已经带了
 `<|im_start|>`**。两者叠加后模型一上来就吐结束符，表现是"只生成几个 token 就停、
@@ -179,7 +261,7 @@ OHOS 的 clang 定义了 `__linux__`，于是 llama.cpp 里
 
 **规则：套模板 → `add_special=false`；裸续写 → `add_special=true`。**
 
-### 5.8 空 sampler chain 会直接断言崩溃
+### 5.9 空 sampler chain 会直接断言崩溃
 
 `llama_sampler_sample()` 要求链里**至少有一个 sampler**。空链的 `cur_p.selected`
 是 -1，采样时：
@@ -191,19 +273,70 @@ Signal 6
 
 必须 `llama_sampler_chain_add(chain, llama_sampler_init_greedy())`。
 
-### 5.9 停止串必须先跳过思考块
+### 5.10 停止串必须先跳过思考块
 
 思考块内部也含双换行。若一开始就判停止串，会在 `<think>` 后第一个换行处就截断，
 **正文一个字都留不下**（真踩过）。要先用 `</think>` 划出边界，边界之后才开始判停止串。
 
-### 5.10 `printf("%s")` 会在 NUL 处截断，掩盖真实输出
+### 5.11 停止串不能放在回调之后判定
+
+先截断、再回调，会出现"**已经吐给调用方的字符又被从结果里去掉**"的不一致 ——
+实测表现为表格续写丢掉了行尾的 `|`。**必须先回调、后判定**，让消费者看到的
+与最终结果一致。
+
+### 5.12 `printf("%s")` 会在 NUL 处截断，掩盖真实输出
 
 排查时看到 `raw: <think>` 却统计出 24 个 token —— 不是模型只生成了这些，
 而是 `%s` 遇到 NUL 就停了。探针改用转义打印（`\n` / `\0` / `\xNN`）。
 
 ---
 
-## 六、对产品形态的结论
+## 六、桥接层（应用真正要用的接口）
+
+探针证明了"能跑"，但探针是一次性程序。应用需要的是**模型只加载一次、可反复补全**
+的接口。这部分在 `app/tool/ohos-ai/yan_ai.cpp`（C API，`yan_ai.h` 是头文件）。
+
+| 接口 | 作用 |
+|---|---|
+| `yan_ai_load` / `yan_ai_unload` / `yan_ai_is_loaded` | 会话生命周期 |
+| `yan_ai_complete` | 阻塞式补全，逐 token 回调，返回停止原因 |
+| `yan_ai_cancel` | 从其它线程打断生成 |
+
+### 6.1 设备实测（模拟器 x86_64，Qwen3-0.6B Q4_K_M）
+
+三次连续补全**共用一次模型加载**，全部通过：
+
+| 用例 | 输出 | 停止原因 |
+|---|---|---|
+| 表格续写 | ` Linux \| 已发布 \|` | `stop` |
+| 段落续写 | `支持多种格式，包括但不限于 HTML、CSS、XML、Markdown、Markdown+CSS、…` | `max` |
+| 列表续写 | ` 支持 Android` | `stop` |
+
+加载模型后，三次补全总计约 3–5 秒（含设备传输），**没有重新加载模型**。
+
+### 6.2 放弃"复读度量"作为主要防线（重要）
+
+原本的设计是"检测到复读就截断"。实测发现**这个思路不成立**：
+
+0.6B 的复读是**递增式**的 —— 每次都拼一个新组合
+（`Markdown+CSS`、`Markdown+XML`、`Markdown+HTML`、`Markdown+CSS+XML`、…），
+**并非重复同一段**。所以按"片段复用率"度量出来只有 **0.30–0.46**，
+远达不到判定阈值，而且**输出越长该值越低**（109 字节时 0.30）。
+
+结论：递增式复读**没有低成本的可靠判据**。真正的防线是另外三个：
+
+1. **有界预算** —— 默认只生成 24 token。这个量级是"一条建议"，不是"一段文章"。
+   降到 24 后输出立刻变得可用（`…Markdown+CSS、Markdown+XML、Markdown+` 被干净截断）
+2. **停止串** —— 按光标所在行形态选：
+   - 结构化行（表格 / 列表 / 引用 / 标题 / 有序列表）→ 下一个换行
+   - 普通段落 → 句子边界（`。！？；…`）与换行
+3. **回调里可取消** —— 调用方（应用）觉得输出没价值就直接返回非 0，立刻停止
+
+复读检测保留为兜底，但**不再当作主要机制**。
+
+---
+
+## 七、对产品形态的结论
 
 实测数据推翻了"手机 CPU 太慢、只能异步"的悲观估计，但**没有**推翻"要异步"这个结论，
 理由变了：
@@ -218,6 +351,28 @@ Signal 6
 **关键设计约束**：
 
 1. **必须走裸续写**，不能套 chat 模板 —— 否则每次建议都先付 3–6 秒思考税
-2. **必须有停止串 + 重复检测** —— 小模型会复读，没有截断会一路生成到上限
+2. **必须有停止串 + 有界预算** —— 小模型会递增式复读，且没有便宜的判据能识别它
 3. **必须异步 + 可取消** —— 用户继续打字时，在途的推理要能作废
+4. **模型只加载一次** —— 378 MB 的模型每次补全都重载是不可接受的（桥接层已实现会话复用）
+
+### 7.1 集成路径（已验证可行）
+
+```
+FFI 插件（HAR）
+  └─ build-profile.json5: buildOption.externalNativeOptions.path = "../src/CMakeLists.txt"
+       └─ hvigor 用 DevEco SDK 官方 ohos.toolchain.cmake 调 CMake
+            └─ libyan_ai.so（AArch64，11.5 MB，导出 5 个 yan_ai_* 符号）
+                 └─ Dart: DynamicLibrary.open('libyan_ai.so')
+```
+
+CMake 路径实测通过：配置 1–2 秒、265 个源文件全部编过、产出 AArch64 共享库。
+`plugin_ffi` 的 Dart 模板里 `Platform.isOhos` 分支是现成的，不需要自造。
+
+### 7.2 还没做的
+
+- **Dart FFI 绑定**与编辑器集成（补全建议的 UI 呈现、接受/忽略交互）
+- **模型分发**：378 MB 不适合打进 HAP，需要"首次启动下载"或"用户导入"流程
+- **真机验证**：本机只有 x86_64 模拟器，ARM64 真机的速度与内存未实测
+- **内存评估**：485 MB 峰值在中低端机上是否可接受，需要真机确认
+
 

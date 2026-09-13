@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../state/workspace.dart';
 
+/// 把 [WorkspaceState] 注入子树。
 class WorkspaceScope extends InheritedNotifier<WorkspaceState> {
   const WorkspaceScope({
     super.key,

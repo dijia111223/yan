@@ -16,6 +16,7 @@ import '../core/models.dart';
 import '../core/search.dart';
 import 'editor_controller.dart';
 
+/// 一个打开的标签页。
 class OpenDocument {
   OpenDocument({
     required this.path,

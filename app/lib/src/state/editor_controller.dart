@@ -121,6 +121,7 @@ class MarkdownEditingController extends TextEditingController {
   }
 }
 
+/// 正文统计。[words] 里汉字按字计、拉丁文按词计。
 class TextStats {
   const TextStats({
     required this.characters,

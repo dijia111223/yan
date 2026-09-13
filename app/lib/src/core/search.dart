@@ -45,6 +45,7 @@ class SearchHit {
   String get location => line == null ? '' : '第 $line 行';
 }
 
+/// 搜索范围。
 enum SearchScope {
   both('文件名 + 内容'),
   fileName('仅文件名'),

@@ -210,6 +210,7 @@ class _CodeCard extends StatelessWidget {
   }
 }
 
+/// 代码块高亮：按 [language] 选规则，未识别时按纯文本处理。
 class CodeHighlighter {
   const CodeHighlighter(this.theme, this.language);
 

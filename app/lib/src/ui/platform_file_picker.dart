@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
+/// 目录选择失败；[message] 为空表示用户取消。
 class DirectoryPickException implements Exception {
   const DirectoryPickException(this.message);
 

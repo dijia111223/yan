@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../core/markdown_edit_assist_formatter.dart';
 import '../state/editor_controller.dart';
 
 /// 源码编辑器：行号栏 + 语法高亮文本域。
@@ -94,6 +96,10 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
               // 搜索跳转按行滚动，锚点挂在这个 key 上
               key: widget.controller.editableKey,
               scrollController: _vertical,
+              // Markdown 编辑增强：续列表、补围栏、配对符号、Tab 跳格
+              inputFormatters: const <TextInputFormatter>[
+                MarkdownEditAssistFormatter(),
+              ],
               maxLines: null,
               expands: false,
               keyboardType: TextInputType.multiline,

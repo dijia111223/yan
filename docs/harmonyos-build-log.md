@@ -76,7 +76,38 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\build_ohos.p
 
 ---
 
-## 途中解决的 4 个真实问题
+## 途中解决的 5 个真实问题
+
+### 0. DevEco 同步报 `Error Code: 00308018`（最常见的一个）
+
+**症状**：
+
+```
+> hvigor ERROR: Error Code: 00308018 Unknown Error
+TypeError Cannot read properties of undefined (reading 'filter')
+  at evaluateHvigorConfig (.../hvigor/src/base/internal/lifecycle/init.js:1:5193)
+```
+
+**根因**：`flutter-hvigor-plugin` 的 `findFlutterPlugins()` 做
+`JSON.parse(fileContent).plugins.ohos` 之后直接 `.filter(...)`，
+而**官方 Flutter 的 `pub get` 会重写 `.flutter-plugins-dependencies` 并抹掉 `ohos` 键**
+（它不认识 ohos 平台）。实测：
+
+```
+OHOS fork 写的       -> ios, android, macos, linux, windows, web, ohos
+官方 Flutter 3.47 写的 -> ios, android, macos, linux, windows, web        (ohos 消失)
+```
+
+于是 `.plugins.ohos` 是 `undefined` → `.filter` 抛错 → hvigor 同步整体失败。
+
+**修复**：
+
+- `tool/patch_hvigor_plugin.ps1`：把插件改为容错（缺键当"无 ohos 插件"）
+- `tool/build_ohos.ps1`：构建前必定用 OHOS fork 跑 `pub get`；构建后复核插件补丁
+  （hvigor 会跑 `ohpm install`，可能还原 `node_modules`）
+
+**验证**：故意用官方 Flutter 制造"缺 ohos 键"状态后，原命令
+`hvigorw --sync -p product=default ...` 由 `BUILD FAILED` 变为 `exit=0`、无报错。
 
 ### 1. 浅克隆导致版本号算不出来 → 所有依赖求解失败
 
@@ -190,9 +221,15 @@ flutter create --platforms ohos --project-name yan_note --org dev.yan --no-pub .
 # 4. 给 flutter_math_fork 打兼容补丁（pub get 之后）
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_math_for_ohos.ps1
 
-# 5. 构建 HAP
+# 5. 给 hvigor 插件打容错补丁（防止官方 pub get 抹掉 ohos 键后同步崩溃）
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor_plugin.ps1
+
+# 6. 构建 HAP
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\build_ohos.ps1
 ```
+
+**日常最容易踩的一条**：鸿蒙构建之前不要用桌面版 Flutter 跑 `pub get`。
+真跑了也没关系 —— 重新执行第 6 步（脚本里已经包含"用 fork 重新 pub get"这一步）。
 
 ---
 

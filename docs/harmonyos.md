@@ -169,7 +169,60 @@ flutter run --debug -d <deviceId>
 
 ---
 
-## 五、还差的一步：签名（需要你做）
+## 五、高频坑：DevEco 同步报 `Error Code: 00308018`
+
+**症状**（在 DevEco 里同步工程，或直接敲 hvigor 命令时）：
+
+```
+> hvigor ERROR: Error Code: 00308018 Unknown Error
+TypeError Cannot read properties of undefined (reading 'filter')
+  at evaluateHvigorConfig (.../hvigor/src/base/internal/lifecycle/init.js)
+```
+
+**根因（已实测确认，不是配置问题）**
+
+`ohos/node_modules/flutter-hvigor-plugin` 的 `findFlutterPlugins()` 里是：
+
+```js
+const ohosPlugins = JSON.parse(fileContent).plugins.ohos
+const filteredPlugins = ohosPlugins.filter(plugin => plugin.native_build !== false)
+```
+
+而**官方 Flutter 的 `pub get` 会重写 `.flutter-plugins-dependencies`，并抹掉 `ohos` 键** ——
+因为官方 Flutter 根本不认识 `ohos` 这个平台。实测对比：
+
+| 谁跑的 pub get | 顶层键 |
+|---|---|
+| OHOS fork | `ios, android, macos, linux, windows, web, **ohos**` |
+| 官方 Flutter 3.47 | `ios, android, macos, linux, windows, web` ← **ohos 没了** |
+
+`ohos` 键一没，`.plugins.ohos` 就是 `undefined`，`.filter` 立刻抛错，hvigor 连带整个同步失败。
+
+**所以触发条件很日常**：只要在鸿蒙构建之前用桌面版 Flutter 跑过一次 `pub get`
+（比如为了跑 Windows 测试），hvigor 同步就会崩。
+
+**修复（两层，均已落地）**
+
+1. `tool/patch_hvigor_plugin.ps1` —— 把插件改成容错：缺 `ohos` 键时按"没有 ohos 插件"处理，
+   而不是整个崩掉。
+2. `tool/build_ohos.ps1` —— 构建前**必定**用 OHOS fork 跑一次 `pub get`，保证 `ohos` 键存在；
+   构建后再复核一遍插件补丁（因为 hvigor 会跑 `ohpm install`，可能还原 `node_modules`）。
+
+**你自己遇到时的速修**：
+
+```powershell
+# 方案 A：用 OHOS fork 重新生成该文件（治本）
+. C:\yan\app\tool\ohos_env.ps1
+cd C:\yan\app
+flutter pub get
+
+# 方案 B：给插件打容错补丁（治标，但能扛住以后官方 pub get 的覆盖）
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor_plugin.ps1
+```
+
+---
+
+## 六、还差的一步：签名（需要你做）
 
 `ohos/build-profile.json5` 里 `signingConfigs` 是**空数组**（`flutter create` 生成时不含签名），
 因此只能产出 unsigned HAP，**装不上真机**。构建日志里的原文提示：
@@ -190,7 +243,7 @@ flutter run --debug -d <deviceId>
 
 ---
 
-## 六、已知卡点与风险
+## 七、已知卡点与风险
 
 | 卡点 | 说明 | 状态 |
 |---|---|---|
@@ -202,7 +255,7 @@ flutter run --debug -d <deviceId>
 
 ---
 
-## 七、诚实结论：做到哪一步了
+## 八、诚实结论：做到哪一步了
 
 **已经完成并实测通过的**：
 
@@ -230,7 +283,7 @@ flutter run --debug -d <deviceId>
 
 ---
 
-## 八、给上游的反馈建议
+## 九、给上游的反馈建议
 
 本次踩到的问题都值得提给上游，对后来的鸿蒙 Flutter 使用者有直接价值：
 
@@ -243,10 +296,14 @@ flutter run --debug -d <deviceId>
 3. **官方仓（gitee `openharmony-sig`）的 master 仍停留在 Flutter 3.7.12 / Dart 2.19** ——
    与 2026 年的 Dart 3 生态差距过大。建议 README 明确标注"Dart 2.19，不支持 records /
    模式匹配"，避免使用者按默认分支拉下来才发现要降级语言特性。
+4. **`flutter-hvigor-plugin` 应按缺失的 `ohos` 键容错** —— 官方 Flutter 的 `pub get` 会抹掉
+   该键（它不认识 ohos 平台），而插件直接 `.plugins.ohos.filter(...)`，导致
+   `Error Code: 00308018`。建议插件方改成 `?? []`，或在 README 里写明
+   "跑过官方 pub get 之后要用 fork 重新生成 `.flutter-plugins-dependencies`"。
 
 ---
 
-## 九、参考
+## 十、参考
 
 - [Flutter 鸿蒙版环境配置（Windows）](https://cloud.tencent.com.cn/developer/article/2514736)
 - [适配 HarmonyOS Next API16 的鸿蒙版 Flutter 3.22.0 发布](https://cloud.tencent.cn/developer/article/2518615)

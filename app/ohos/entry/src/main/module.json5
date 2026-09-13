@@ -33,8 +33,9 @@
         ]
       }
     ],
-    "requestPermissions": [
-      {"name" :  "ohos.permission.INTERNET"},
-    ]
+    // 不申请任何权限：砚是纯本地编辑器，不联网、不读通讯录、不定位。
+    // 模板默认带的 ohos.permission.INTERNET 已移除（代码里没有任何网络调用），
+    // 上架时多余权限会被审核追问。
+    "requestPermissions": []
   }
 }

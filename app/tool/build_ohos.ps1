@@ -43,6 +43,13 @@ Write-Host "  Flutter(OHOS) : $OhosFlutter"
 Write-Host "  DEVECO_SDK_HOME: $env:DEVECO_SDK_HOME"
 Write-Host "  JAVA_HOME     : $env:JAVA_HOME"
 
+# ---- 对齐 SDK 版本 ----
+# 模板写死的 5.0.0(12) 与本机 SDK 不匹配时，DevEco 会报"值不正确"。
+$sdkSync = Join-Path $ProjectRoot 'tool\sync_ohos_sdk_version.ps1'
+if (Test-Path $sdkSync) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $sdkSync -ProjectRoot $ProjectRoot -DevEco $DevEco
+}
+
 # ---- 临时裁剪 pubspec ----
 Copy-Item $pubspec $backup -Force
 Write-Host "=== 已备份 pubspec.yaml ===" -ForegroundColor Cyan

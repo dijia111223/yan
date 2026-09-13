@@ -42,8 +42,18 @@ dependencies:
   # --- 路径处理 ---
   path: ">=1.9.0 <2.0.0"
 
-  # --- UI 状态持久化（宪章：SQLite 只存最近打开列表等 UI 状态；此处用平台偏好存储）---
-  shared_preferences: ">=2.3.0 <3.0.0"
+  # --- UI 状态持久化（记录上次打开的库、视图偏好）---
+  #
+  # 用 OpenHarmony SIG 的鸿蒙适配分支而非 pub 上的官方包：官方包的 pubspec 里没有
+  # `ohos:` 平台声明，鸿蒙端不会注册任何插件（GeneratedPluginRegistrant 是空的），
+  # "记住上次打开的库"于是静默失效。该分支声明了 ohos 实现。
+  #
+  # 不用 git 依赖而用本地 vendor/：这个仓把整套 webview_flutter 的安卓源码都塞在
+  # 一处，工作区 109 MB / 8839 个文件，git 依赖要在 PUB_CACHE 里克隆三份（同名分支
+  # 也要各存一份 commit），且路径长到需要 core.longpaths。
+  # vendor/ 下只留需要的包，约 1 MB。
+  shared_preferences:
+    path: vendor/shared_preferences/shared_preferences
 
   # --- 打开外部链接 ---
   url_launcher: ">=6.2.0 <7.0.0"

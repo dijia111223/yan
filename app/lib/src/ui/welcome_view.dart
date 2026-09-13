@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../state/workspace.dart';
 import '../state/workspace_scope.dart';
-import 'platform_file_picker.dart';
+import '../core/platform_file_picker.dart';
 import 'window_title.dart';
 /// 没有库时显示的欢迎页。
 class WelcomeView extends StatelessWidget {

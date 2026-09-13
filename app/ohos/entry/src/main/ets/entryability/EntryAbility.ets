@@ -37,12 +37,77 @@ export default class EntryAbility extends FlutterAbility {
         Log.i(TAG, 'onMethodCall: ' + call.method)
         if (call.method === 'pickDirectory') {
           this.pickAndImport(result)
+        } else if (call.method === 'exportFile') {
+          this.exportFile(call.argument('name') as string, result)
+        } else if (call.method === 'ensureLibraryDir') {
+          // 启动时就把沙箱库目录建好。
+          // 否则用户在"还没导入过任何笔记"的状态下点新建会失败 —— 库根不存在，
+          // 而 createNote 是往库根写的。
+          try {
+            if (!fs.accessSync(this.importDir)) {
+              fs.mkdirSync(this.importDir);
+            }
+            result.success(this.importDir);
+          } catch (err) {
+            Log.e(TAG, 'ensureLibraryDir failed: ' + JSON.stringify(err))
+            result.error('MKDIR_FAILED', '创建库目录失败：' + (err?.message ?? ''), null)
+          }
         } else {
           result.notImplemented()
         }
       }
     })
     Log.i(TAG, 'channel registered: ' + CHANNEL + ', importDir=' + this.importDir)
+  }
+
+  /**
+   * 导出：让用户选保存位置，把内容写过去。
+   *
+   * 为什么要这个：鸿蒙的 DocumentViewPicker 只能选文件、不能选目录，
+   * 所以"选一个文件夹原地读写"做不到。当前模型是导入到沙箱再编辑，
+   * 那就必须给一条把改动送回去的路，否则用户的编辑永远出不了沙箱。
+   */
+  private exportFile(name: string, result: MethodResult): void {
+    if (!name) {
+      result.error('BAD_ARGS', '缺少文件名', null)
+      return
+    }
+    const ctx = this.context as common.UIAbilityContext;
+    try {
+      const savePicker = new picker.DocumentViewPicker(ctx);
+      const options = new picker.DocumentSaveOptions();
+      options.newFileNames = [name];
+      options.fileSuffixChoices = ['.md', '.markdown', '.txt'];
+
+      savePicker.save(options)
+        .then((uris: Array<string>) => {
+          if (!uris || uris.length === 0) {
+            result.success(null)   // 用户取消
+            return
+          }
+          const dest = uris[0];
+          const src = fs.openSync(`${this.importDir}/${name}`, fs.OpenMode.READ_ONLY);
+          try {
+            const out = fs.openSync(dest, fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
+            try {
+              fs.copyFileSync(src.fd, out.fd);
+            } finally {
+              fs.closeSync(out);
+            }
+          } finally {
+            fs.closeSync(src);
+          }
+          Log.i(TAG, 'exported ' + name + ' -> ' + dest);
+          result.success(dest);
+        })
+        .catch((err: Error) => {
+          Log.e(TAG, 'save failed: ' + JSON.stringify(err))
+          result.error('EXPORT_FAILED', '导出失败：' + (err?.message ?? ''), null)
+        })
+    } catch (err) {
+      Log.e(TAG, 'export threw: ' + JSON.stringify(err))
+      result.error('EXPORT_FAILED', '导出失败：' + (err?.message ?? ''), null)
+    }
   }
 
   /** 打开系统文件选择器，把选中的笔记复制进沙箱，返回沙箱目录路径。 */

@@ -1,4 +1,4 @@
-# Package the Windows release into a self-contained zip.
+﻿# Package the Windows release into a self-contained zip.
 #
 # yan_note.exe links VCRUNTIME140.dll / MSVCP140.dll, so a machine without the
 # VC++ redistributable would fail to start. The MSVC runtime is redistributable,

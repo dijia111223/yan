@@ -1,4 +1,4 @@
-# 鸿蒙构建环境变量。用法：. C:\yan\app\tool\ohos_env.ps1
+﻿# 鸿蒙构建环境变量。用法：. C:\yan\app\tool\ohos_env.ps1
 #
 # 用 CPF-Flutter 的 3.27.4-ohos 而非官方仓：后者 master 是 Flutter 3.7.12 / Dart 2.19，
 # 编不了用了 records 与模式匹配的代码。详见 docs/harmonyos.md。

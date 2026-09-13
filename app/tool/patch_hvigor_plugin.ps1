@@ -1,4 +1,4 @@
-# 让 flutter-hvigor-plugin 容忍缺失的 `ohos` 键。
+﻿# 让 flutter-hvigor-plugin 容忍缺失的 `ohos` 键。
 #
 # 官方 Flutter 的 pub get 会重写 .flutter-plugins-dependencies，且不含 ohos 平台，
 # 于是 plugins.ohos 变成 undefined，插件里的 ohosPlugins.filter(...) 抛
@@ -68,6 +68,29 @@ foreach ($t in $targets) {
 }
 
 Write-Host ""
-if ($changed -eq 0) { Write-Host "无需改动。" -ForegroundColor Yellow }
-else { Write-Host "已修改 $changed 个文件。" -ForegroundColor Green }
+if ($changed -eq 0) {
+    Write-Host "无需改动。" -ForegroundColor Yellow
+} else {
+    Write-Host "已修改 $changed 个文件。" -ForegroundColor Green
+
+    # 改完必须重启 hvigor 守护进程。
+    # 守护进程把插件代码缓存在内存里（Node 的 require 缓存），文件被改不会让已加载的模块
+    # 失效 —— 结果是"补丁明明打上了，DevEco 构建仍然报 00308018 filter 错误"。
+    # 实测：worker 于 12:47 启动、补丁于 12:53 写入，13:24 构建仍走旧代码；
+    # 杀掉守护进程后同一命令立即恢复正常。
+    Write-Host ""
+    Write-Host "重启 hvigor 守护进程（否则它会继续用内存里的旧插件）..." -ForegroundColor Yellow
+    $stopped = 0
+    # 只杀 hvigor 自己的 node 进程，不碰用户其它 node 程序
+    foreach ($proc in (Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue)) {
+        $cmd = [string]$proc.CommandLine
+        $exe = [string]$proc.ExecutablePath
+        if ($cmd -match 'hvigor' -or $exe -like '*DevEco Studio*') {
+            Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+            $stopped++
+        }
+    }
+    Write-Host "  已停止 $stopped 个 hvigor 守护进程（下次构建会自动重启并重新读插件）" -ForegroundColor Green
+}
+
 Write-Host "提示：重新 ohpm install 或换机器后需重跑本脚本（build_ohos.ps1 会自动调用）。"

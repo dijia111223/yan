@@ -220,6 +220,32 @@ flutter pub get
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor_plugin.ps1
 ```
 
+### 打完补丁仍然报同一个错？先重启守护进程
+
+**这是最容易误判的一步。** hvigor 守护进程把插件代码**缓存在内存里**（Node 的 require 缓存），
+文件被改动**不会**让已加载的模块失效。于是会出现"补丁明明在文件里，DevEco 构建却仍报
+`00308018 / reading 'filter'`"。
+
+实测时间线：
+
+| 时间 | 事件 |
+|---|---|
+| 12:47:35 | 守护进程 worker 启动，加载**未打补丁**的插件 |
+| 12:53:08 | 补丁写入文件（worker 内存里仍是旧的） |
+| 13:24 | DevEco 构建 → 复用旧 worker → 旧代码 → 崩 |
+
+**判别方法**：同一命令
+
+```powershell
+hvigorw --sync -p product=default ... --daemon      # 崩
+hvigorw --sync -p product=default ... --no-daemon   # 正常
+```
+
+加了 `--daemon` 崩、加 `--no-daemon` 正常 —— 就是守护进程缓存。
+
+**处理**：杀掉 hvigor 的 node 进程（`patch_hvigor_plugin.ps1` 现在会自动做这件事），
+下次构建会自动重启并重新读取插件。
+
 ---
 
 ## 六、还差的一步：签名（需要你做）

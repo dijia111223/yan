@@ -220,8 +220,48 @@ flutter pub get
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor_plugin.ps1
 ```
 
-### 打完补丁仍然报同一个错？先重启守护进程
+### 报 "The specified language version is too high"？
 
+**症状**（编译官方 Flutter 的框架源码）：
+
+```
+/C:/flutter/packages/flutter/lib/src/widgets/widget_inspector.dart:1:1:
+  Error: The specified language version is too high. The highest supported language version is 3.6.
+/C:/flutter/packages/flutter/lib/src/widgets/widget_inspector.dart:3940:26:
+  Error: This requires the experimental 'null-aware-elements' language feature to be enabled.
+```
+
+**根因**：`.dart_tool/package_config.json` **被两套 Flutter SDK 共用**，它记录 `flutter` 包解析到哪个
+SDK。谁最后跑 `pub get`，它就指向谁：
+
+```
+桌面 Flutter 3.47 跑完 -> flutter -> file:///C:/flutter/packages/flutter
+鸿蒙 fork 跑完         -> flutter -> file:///C:/ohos-flutter-327/packages/flutter
+```
+
+指到官方那侧时，Dart 3.6 会去编译 Flutter 3.47 的框架源码，而那些源码用了
+`null-aware-elements`（`?_widget` 语法）等新语言特性，于是报语言版本过高。
+
+**修复**：hvigor 插件的 `FlutterTask` 现在会在 `flutter assemble` **之前**用本 SDK 跑一次
+`pub get`（`app/tool/patch_hvigor_plugin.ps1` 打的补丁）。这样无论上一次是谁跑过 `pub get`，
+鸿蒙构建都会自我纠正 —— **从 DevEco 里直接构建也不会再踩到**。
+
+实测：故意把 `package_config` 留在官方那侧，然后直接用 DevEco 的调用形式
+`hvigorw assembleHap ...` 构建 → `BUILD SUCCESSFUL in 30 s`，`package_config` 被自动纠正。
+
+### 同一个 `flutter_math_fork`，改了一份还有另一份
+
+本机存在**多个 pub 缓存**，而 hvigor 里跑的 `pub get` 用哪个取决于它继承到的 `PUB_CACHE`：
+
+| 缓存 | 来源 |
+|---|---|
+| `C:\pub-cache-ohos327` | 鸿蒙 fork（我的脚本里显式设置） |
+| `C:\pub-cache` | 桌面端 / DevEco 守护进程继承到的 User 级 `PUB_CACHE` |
+
+只补一份，另一条路径上就会重新报 `RenderObjectWithLayoutCallbackMixin not found`。
+所以 `patch_math_for_ohos.ps1` 现在会**扫描并修补所有已知缓存**里的该包。
+
+---
 **这是最容易误判的一步。** hvigor 守护进程把插件代码**缓存在内存里**（Node 的 require 缓存），
 文件被改动**不会**让已加载的模块失效。于是会出现"补丁明明在文件里，DevEco 构建却仍报
 `00308018 / reading 'filter'`"。

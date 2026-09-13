@@ -1,13 +1,10 @@
 import 'latex_to_unicode.dart';
 
-/// 从 Markdown 源码中抽出的**行间**公式（`$$...$$`）。
-///
-/// 行内公式不走这里——它会被 [MathExtractor] 直接转成 Unicode 文本随文排版，
-/// 原因见 `latex_to_unicode.dart` 的说明。
+/// 行间公式（`$$...$$`）。行内公式不走这里，见 [MathExtractor]。
 class MathFragment {
   const MathFragment({required this.tex});
 
-  /// LaTeX 源码（不含分隔符）。
+  /// 不含分隔符。
   final String tex;
 
   @override
@@ -21,11 +18,8 @@ class MathExtraction {
     required this.fragments,
   });
 
-  /// 处理后的 Markdown：
-  /// 行内公式已变成 Unicode 文本，行间公式已变成 `> <占位符>` 块引用。
   final String markdown;
 
-  /// 占位符 → 行间公式。
   final Map<String, MathFragment> fragments;
 
   static const MathExtraction empty =
@@ -34,26 +28,21 @@ class MathExtraction {
 
 /// LaTeX 公式预处理。
 ///
-/// 分两条路：
+/// 行内 `$...$` 转 Unicode 文本；行间 `$$...$$` 替换为 `> <占位符>` 块引用，
+/// 由预览层整体替换成公式组件。也用块引用是因为它是 flutter_markdown 里
+/// 替换起来最安全的块级元素 —— 替换 `<p>` 会破坏库内部的 inline 记账
+/// （`assert(_inlines.isEmpty)`）。
 ///
-/// * **行内** `$...$`：转成 Unicode 文本（见 [latexToUnicode]），随正文排版。
-///   无法转换时**保留原始 LaTeX**，绝不输出错误的公式。
-/// * **行间** `$$...$$`：替换成 `> <占位符>` 形式的块引用，由预览层用
-///   `flutter_math_fork` 完整排版。之所以借用块引用，是因为它是
-///   `flutter_markdown` 处理得最干净的块级元素，替换它不会破坏库内部的
-///   inline 记账（直接替换 `<p>` 会触发 `assert(_inlines.isEmpty)`）。
-///
-/// 两种写法 `\(...\)` / `\[...\]` 同样支持。代码块与行内代码里的 `$` 一律不动。
+/// 另支持 `\(...\)` / `\[...\]`；代码块与行内代码里的 `$` 不动。
 class MathExtractor {
   const MathExtractor._();
 
-  /// 占位符前缀/后缀，用 NUL 包裹以保证不会与正文冲突。
+  /// 用 NUL 包裹，避免与正文冲突。
   static const String _marker = '\u0000YANMATH';
   static const String _markerEnd = '\u0000';
 
   static String placeholder(int index) => '$_marker$index$_markerEnd';
 
-  /// 判断一段文本是否是（纯）占位符。
   static int? placeholderIndex(String text) {
     final trimmed = text.trim();
     if (trimmed.length < _marker.length + _markerEnd.length + 1) return null;
@@ -63,7 +52,7 @@ class MathExtractor {
     return int.tryParse(digits);
   }
 
-  /// 在一段文本中查找所有占位符，返回 (起始下标, 结束下标, 序号)。
+  /// 返回 (起始下标, 结束下标, 序号)。
   static List<(int, int, int)> findPlaceholders(String text) {
     final results = <(int, int, int)>[];
     var cursor = 0;
@@ -98,7 +87,6 @@ class MathExtractor {
     var atLineStart = true;
 
     while (i < source.length) {
-      // 行首：检查围栏代码块边界
       if (atLineStart) {
         final lineEnd = _lineEnd(source, i);
         final line = source.substring(i, lineEnd);
@@ -134,7 +122,7 @@ class MathExtractor {
 
       final ch = source[i];
 
-      // 围栏代码块内部：一个字符都不动（代码里的 $ 和反斜杠都是字面量）
+      // 围栏内的 $ 与反斜杠都是字面量
       if (inFence) {
         out.write(ch);
         atLineStart = ch == '\n';

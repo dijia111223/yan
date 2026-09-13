@@ -6,9 +6,7 @@ import '../state/workspace.dart';
 
 /// 文件树：文件夹即库，按层懒加载，不做任何索引。
 ///
-/// 目录列举走**同步**读盘（`listChildrenSync`）。理由：树天然是按需展开的，
-/// 一次只列一层，开销可以忽略；而同步渲染路径没有"加载中"中间态，树不会闪，
-/// 也让界面行为完全可预测。
+/// 目录列举走同步读盘 `listChildrenSync`：一次只列一层，开销可忽略，也没有"加载中"中间态。
 class FileTree extends StatefulWidget {
   const FileTree({super.key, required this.state});
 
@@ -19,10 +17,9 @@ class FileTree extends StatefulWidget {
 }
 
 class _FileTreeState extends State<FileTree> {
-  /// 已展开的目录路径。
   final Set<String> _expanded = <String>{};
 
-  /// 目录路径 → 子项（按层缓存，展开时按需读取）。
+  /// 目录路径 → 子项。
   final Map<String, List<LibraryEntry>> _children = <String, List<LibraryEntry>>{};
 
   int _cacheRevision = -1;
@@ -43,7 +40,6 @@ class _FileTreeState extends State<FileTree> {
     _applyReveal();
   }
 
-  /// 读取某一层（已缓存则直接返回）。
   List<LibraryEntry> _childrenOf(String path) {
     final library = state.library;
     if (library == null) return const <LibraryEntry>[];
@@ -65,7 +61,6 @@ class _FileTreeState extends State<FileTree> {
     _ensureLoaded(state.library?.rootPath);
   }
 
-  /// 响应"在树中显示某文件"：展开它所有的父目录。
   void _applyReveal() {
     final reveal = state.revealPath;
     if (reveal == null || reveal == _lastReveal) return;
@@ -197,11 +192,10 @@ class _FileTreeState extends State<FileTree> {
                     childrenOf: _childrenOf,
                     onToggle: (path) => setState(() {
                       if (_expanded.remove(path)) {
-                        // 收起：保留缓存，重新展开时立刻可见
                         return;
                       }
                       _expanded.add(path);
-                      // 展开时丢弃该层缓存，保证看到的是磁盘当前状态
+                      // 展开时丢弃缓存，保证看到的是磁盘当前状态
                       _children.remove(path);
                     }),
                     onCreateNote: _createNote,
@@ -326,7 +320,6 @@ class _Tile extends StatelessWidget {
       },
       onSecondaryTapDown: (details) => _showContextMenu(context, details.globalPosition),
       onLongPress: () {
-        // 移动端：长按唤出同一个上下文菜单
         final box = context.findRenderObject() as RenderBox?;
         final position = box == null
             ? Offset.zero

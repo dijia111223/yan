@@ -16,7 +16,6 @@ import '../core/models.dart';
 import '../core/search.dart';
 import 'editor_controller.dart';
 
-/// 一个已打开的文档（= 一个编辑器标签页）。
 class OpenDocument {
   OpenDocument({
     required this.path,
@@ -29,16 +28,13 @@ class OpenDocument {
   String name;
   final MarkdownEditingController controller;
 
-  /// 最近一次与磁盘一致的内容，用来判断"未保存"。
+  /// 与磁盘一致的内容，用来判断未保存。
   String savedContent;
 
-  /// 最近一次观察到的内容，用来识别"真的是正文变了"。
-  ///
-  /// 不能简单地在 `controller` 的任意一次通知里都当作内容变化：主题切换、
-  /// 选区变化也会通知，那会排出一个毫无意义的自动保存定时器。
+  /// 只有它变了才算正文改动：主题切换、选区变化也会触发 controller 通知。
   String lastObservedText;
 
-  /// 光标所在行 / 列（1 基），供状态栏显示。
+  /// 光标行列，1 基。
   int cursorLine = 1;
   int cursorColumn = 1;
 
@@ -51,15 +47,9 @@ class OpenDocument {
   void dispose() => controller.dispose();
 }
 
-/// 应用状态：库、标签页、偏好设置。
-///
-/// 宪章第 3 节：不引入私有数据库，SQLite/偏好存储只存 UI 状态。
-/// 所以这里持久化的只有"库路径 / 打开的标签 / 分栏开关"这类信息，
-/// 笔记内容永远只活在文件系统里。
+/// 应用状态：库、标签页、偏好。
 class WorkspaceState extends ChangeNotifier {
   WorkspaceState();
-
-  // ---------------------------------------------------------------- 常量
 
   static const String _kLibrary = 'yan.libraryPath';
   static const String _kRecentLibraries = 'yan.recentLibraries';
@@ -73,19 +63,15 @@ class WorkspaceState extends ChangeNotifier {
   static const String _kSort = 'yan.sort';
   static const int _maxRecentLibraries = 8;
 
-  /// 自动保存防抖时长。
   static const Duration autosaveDelay = Duration(milliseconds: 900);
 
   SharedPreferences? _prefs;
-
-  // ---------------------------------------------------------------- 库
 
   Library? _library;
   Library? get library => _library;
   String? get libraryPath => _library?.rootPath;
   bool get hasLibrary => _library != null;
 
-  /// 当前高亮主题（随深色模式切换）。
   MarkdownTheme markdownTheme = MarkdownTheme.light;
 
   List<String> _recentLibraries = <String>[];
@@ -94,15 +80,11 @@ class WorkspaceState extends ChangeNotifier {
   LibrarySort _sort = LibrarySort.nameAsc;
   LibrarySort get sort => _sort;
 
-  /// 文件树刷新计数：任何磁盘结构变化（新建/删除/重命名）都会 +1。
   int _treeRevision = 0;
   int get treeRevision => _treeRevision;
 
-  /// 需要被文件树滚动到并高亮的路径。
   String? _revealPath;
   String? get revealPath => _revealPath;
-
-  // ---------------------------------------------------------------- 标签页
 
   final List<OpenDocument> _documents = <OpenDocument>[];
   List<OpenDocument> get documents => List<OpenDocument>.unmodifiable(_documents);
@@ -112,8 +94,6 @@ class WorkspaceState extends ChangeNotifier {
 
   OpenDocument? get activeDocument =>
       _activeIndex >= 0 && _activeIndex < _documents.length ? _documents[_activeIndex] : null;
-
-  // ---------------------------------------------------------------- UI 偏好
 
   bool _showSidebar = true;
   bool _showPreview = true;
@@ -129,8 +109,6 @@ class WorkspaceState extends ChangeNotifier {
   bool get autosave => _autosave;
   bool get previewLive => _previewLive;
 
-  // ---------------------------------------------------------------- 搜索
-
   SearchScope _searchScope = SearchScope.both;
   bool _searchFrontmatter = true;
   List<SearchHit> _searchHits = const <SearchHit>[];
@@ -143,18 +121,13 @@ class WorkspaceState extends ChangeNotifier {
   bool get searching => _searching;
   String get searchQuery => _searchQuery;
 
-  // ---------------------------------------------------------------- 提示
-
   String? _toast;
   String? get toast => _toast;
-
-  // ---------------------------------------------------------------- 内部
 
   Timer? _autosaveTimer;
   Timer? _toastTimer;
   int _openToken = 0;
 
-  /// 预览用的公式提取缓存（key 为文件路径）。
   final Map<String, ({int hash, MathExtraction extraction})> _mathCache =
       <String, ({int hash, MathExtraction extraction})>{};
 
@@ -179,7 +152,6 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 生命周期
 
-  /// 启动：读取偏好，恢复上次的库与标签页；命令行参数优先于历史状态。
   Future<void> bootstrap({LaunchOptions launch = const LaunchOptions()}) async {
     try {
       _prefs = await SharedPreferences.getInstance();
@@ -200,16 +172,15 @@ class WorkspaceState extends ChangeNotifier {
         orElse: () => LibrarySort.nameAsc,
       );
 
-      // 要打开的库：命令行 > 上次会话
+      // 命令行 > 上次会话
       final lastLibrary = launch.libraryPath ?? prefs.getString(_kLibrary);
       if (lastLibrary != null && Directory(lastLibrary).existsSync()) {
         await openFolder(lastLibrary, remember: launch.libraryPath == null);
 
-        // 要打开的笔记：命令行指定的话就用它，否则恢复上次的标签
         final toOpen = launch.openFiles.isNotEmpty
             ? launch.openFiles
             : (prefs.getStringList(_kOpenTabs) ?? <String>[]);
-        // 命令行只给了笔记、没给库时，把笔记所在目录当库
+        // 只给了笔记没给库时，拿笔记所在目录当库
         if (!hasLibrary && toOpen.isNotEmpty) {
           final dir = p.dirname(toOpen.first);
           if (Directory(dir).existsSync()) {
@@ -232,7 +203,7 @@ class WorkspaceState extends ChangeNotifier {
         if (_documents.isNotEmpty && _activeIndex < 0) _activeIndex = 0;
       }
     } else if (launch.openFiles.isNotEmpty) {
-      // 连偏好存储都不可用时，仍要尽力满足命令行请求
+      // 偏好存储不可用时也要满足命令行请求
       final dir = p.dirname(launch.openFiles.first);
       if (Directory(dir).existsSync()) {
         await openFolder(dir);
@@ -260,7 +231,6 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 库操作
 
-  /// 打开一个文件夹作为库。已有未保存内容时返回 false（由 UI 决定是否继续）。
   Future<bool> openFolder(String path, {bool remember = true}) async {
     final dir = Directory(path);
     if (!await dir.exists()) {
@@ -298,7 +268,6 @@ class WorkspaceState extends ChangeNotifier {
     return true;
   }
 
-  /// 关闭当前库。
   Future<void> closeLibrary() async {
     await saveAll();
     _library = null;
@@ -320,7 +289,6 @@ class WorkspaceState extends ChangeNotifier {
     unawaited(_persist());
   }
 
-  /// 请求文件树滚动到指定路径（新建文件后使用）。
   void requestReveal(String? path) {
     _revealPath = path;
     notifyListeners();
@@ -330,7 +298,6 @@ class WorkspaceState extends ChangeNotifier {
     _revealPath = null;
   }
 
-  /// 磁盘结构变化后刷新文件树。
   void refreshTree() {
     _treeRevision++;
     notifyListeners();
@@ -338,7 +305,6 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 文档操作
 
-  /// 打开文件。[activate] 为 false 时只加载标签不切换（用于恢复会话）。
   Future<OpenDocument?> openFile(String path, {bool activate = true}) async {
     final existing = _documents.where((d) => d.path == path).toList();
     if (existing.isNotEmpty) {
@@ -380,14 +346,13 @@ class WorkspaceState extends ChangeNotifier {
 
   static Future<String> _readFile(File file) async {
     final bytes = await file.readAsBytes();
-    // 去掉 UTF-8 BOM，否则会在正文首行显示成乱码
+    // 去掉 UTF-8 BOM，否则首行显示乱码
     if (bytes.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) {
       return utf8.decode(bytes.sublist(3), allowMalformed: true);
     }
     return utf8.decode(bytes, allowMalformed: true);
   }
 
-  /// 新建笔记并打开。
   Future<OpenDocument?> createNote({String? parentPath}) async {
     final library = _library;
     if (library == null) return null;
@@ -403,7 +368,7 @@ class WorkspaceState extends ChangeNotifier {
     }
   }
 
-  /// 给新建的空笔记补一份符合语料层规范的 frontmatter。
+  /// 补空笔记的 frontmatter，title 取自文件名。
   Future<void> _applyFrontmatterTemplate(OpenDocument? doc) async {
     if (doc == null) return;
     final title = p.basenameWithoutExtension(doc.path);
@@ -414,7 +379,6 @@ class WorkspaceState extends ChangeNotifier {
     await saveDocument(doc);
   }
 
-  /// 新建文件夹。
   Future<void> createFolder({String? parentPath}) async {
     final library = _library;
     if (library == null) return;
@@ -472,7 +436,7 @@ class WorkspaceState extends ChangeNotifier {
   // ================================================================ 保存
 
   void _onDocumentChanged() {
-    // 只有正文真的变了才排自动保存：主题切换 / 选区变化也会走到这里。
+    // 只有正文真的变了才排自动保存：主题切换、选区变化也会走到这里。
     final doc = activeDocument;
     if (doc != null && doc.controller.text != doc.lastObservedText) {
       doc.lastObservedText = doc.controller.text;
@@ -518,15 +482,10 @@ class WorkspaceState extends ChangeNotifier {
     });
   }
 
-  /// 保存单个文档。
-  ///
-  /// 首选「临时文件 + 重命名」：这样即使写到一半断电/崩溃，原文件也不会变成半截。
-  /// 但 Windows 上**重命名到一个正被占用的文件会失败**（`Cannot rename file to ...`），
-  /// 而用户打开的笔记恰恰常常被其它程序占用（实时预览、同步盘、杀毒软件……）。
-  /// 因此重命名失败时退回直接写入——先保住用户的字，再谈原子性。
+  /// 首选临时文件 + 重命名，但 Windows 上目标被占用时 rename 会失败（笔记常被
+  /// 预览、同步盘、杀毒占用），这时退回直接覆写。
   Future<bool> saveDocument(OpenDocument doc) async {
     if (!doc.isDirty) return true;
-    // 手动/显式保存后不该再有排队的自动保存定时器
     _autosaveTimer?.cancel();
     final content = doc.content;
 
@@ -544,11 +503,10 @@ class WorkspaceState extends ChangeNotifier {
         await temp.rename(doc.path);
         wrote = true;
       } on FileSystemException {
-        // 目标被占用等情况下退回直接覆写
         try {
           await temp.delete();
         } on FileSystemException {
-          // 清理失败无关紧要
+          // 清理失败不影响保存
         }
       }
 
@@ -566,14 +524,12 @@ class WorkspaceState extends ChangeNotifier {
     }
   }
 
-  /// 保存当前文档。
   Future<bool> saveActive() async {
     final doc = activeDocument;
     if (doc == null) return true;
     return saveDocument(doc);
   }
 
-  /// 保存全部未保存文档。
   Future<void> saveAll() async {
     _autosaveTimer?.cancel();
     for (final doc in _documents) {
@@ -585,14 +541,12 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 标签页内容
 
-  /// 在当前文档中跳到指定行列。
   void jumpTo(int line, {int? column}) {
     final doc = activeDocument;
     if (doc == null) return;
     doc.controller.jumpToLine(line, column: column);
   }
 
-  /// 在编辑器光标处插入文本。
   void insertAtCursor(String snippet) {
     final doc = activeDocument;
     if (doc == null) return;
@@ -603,7 +557,7 @@ class WorkspaceState extends ChangeNotifier {
     final end = selection.isValid ? selection.end : text.length;
     final before = text.substring(0, start);
     final after = text.substring(end);
-    // 行内包裹类语法（粗体/斜体/代码）由调用方传入成对标记
+    // 成对标记（粗体/斜体/代码）由调用方传入
     final next = '$before$snippet$after';
     controller.value = TextEditingValue(
       text: next,
@@ -611,7 +565,6 @@ class WorkspaceState extends ChangeNotifier {
     );
   }
 
-  /// 在末尾追加内容（用于"插入 frontmatter 模板"等操作）。
   void appendText(String snippet) {
     final doc = activeDocument;
     if (doc == null) return;
@@ -623,14 +576,13 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ frontmatter
 
-  /// 当前文档的 frontmatter 解析结果。
   Frontmatter get activeFrontmatter {
     final doc = activeDocument;
     if (doc == null) return Frontmatter.none;
     return FrontmatterCodec.parse(doc.content);
   }
 
-  /// 写入 frontmatter 字段（保留其它字段与注释）。
+  /// 保留其它字段与注释。
   Future<void> updateFrontmatter(Map<String, Object?> updates, {Set<String> removeKeys = const <String>{}}) async {
     final doc = activeDocument;
     if (doc == null) return;
@@ -641,7 +593,6 @@ class WorkspaceState extends ChangeNotifier {
     await saveDocument(doc);
   }
 
-  /// 给当前文档补上语料层规范的 frontmatter。
   Future<void> ensureFrontmatter() async {
     final doc = activeDocument;
     if (doc == null) return;
@@ -656,7 +607,6 @@ class WorkspaceState extends ChangeNotifier {
     await saveDocument(doc);
   }
 
-  /// 更新 `updated` 字段为今天（保存时自动调用可选）。
   Future<void> touchUpdatedField() async {
     final doc = activeDocument;
     if (doc == null) return;
@@ -739,7 +689,6 @@ class WorkspaceState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 执行搜索。
   Future<void> runSearch(String query) async {
     final library = _library;
     _searchQuery = query;
@@ -761,17 +710,16 @@ class WorkspaceState extends ChangeNotifier {
       searchFrontmatter: _searchFrontmatter,
     );
 
-    if (token != _openToken) return; // 已有更新的搜索
+    if (token != _openToken) return; // 已有更新的搜索，丢掉这次结果
     _searchHits = hits;
     _searching = false;
     notifyListeners();
   }
 
-  /// 打开搜索结果，并跳到命中行。
   Future<void> openHit(SearchHit hit) async {
     await openFile(hit.path);
     if (hit.line != null) {
-      // 等编辑器完成一帧布局后再跳转，否则滚动位置会被重置
+      // 等一帧布局再跳，否则滚动位置会被重置
       await Future<void>.delayed(const Duration(milliseconds: 60));
       jumpTo(hit.line!, column: hit.column);
     }
@@ -779,19 +727,12 @@ class WorkspaceState extends ChangeNotifier {
 
   // ================================================================ 预览 / 公式
 
-  /// 预览渲染用的 Markdown（frontmatter 已剥离，公式已替换为占位符）。
   String previewSourceFor(OpenDocument doc) => _extractionFor(doc).markdown;
 
-  /// 预览公式表。
   Map<String, MathFragment> mathFragmentsFor(OpenDocument doc) => _extractionFor(doc).fragments;
 
-  /// 公式提取结果缓存：同一份内容只扫描一次。
-  ///
-  /// **frontmatter 必须先剥掉再交给 Markdown 渲染器**：
-  /// frontmatter 的分隔符 `---` 在 Markdown 里是「分隔线」或「setext 标题下划线」，
-  /// 直接渲染会把整块元数据当成正文显示（表现为预览顶部出现一段
-  /// `title: … tags: …` 的正文）。frontmatter 交给 frontmatter 面板负责，
-  /// 预览只渲染正文。
+  /// 公式提取缓存，同一份内容只扫一次。frontmatter 必须先剥掉：`---` 在
+  /// Markdown 里是分隔线，直接渲染会把元数据当正文显示。
   MathExtraction _extractionFor(OpenDocument doc) {
     final content = doc.content;
     final hash = content.hashCode;
@@ -844,12 +785,9 @@ class WorkspaceState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 显示一条短提示。
   void showToast(String message) {
     _toast = message;
-    // 记住计时器并在销毁时取消：悬空计时器会让 widget 测试报
-    // "A Timer is still pending even after the widget tree was disposed."，
-    // 在真实应用里也可能在退出瞬间触发一次无意义的重建。
+    // 计时器要在 dispose 里取消，否则 widget 测试会报 pending Timer。
     _toastTimer?.cancel();
     _toastTimer = Timer(const Duration(seconds: 3), () {
       if (_toast == message) {

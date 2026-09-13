@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/search.dart';
 import '../state/workspace.dart';
 
-/// 全文搜索面板：文件名 + 内容，结果为可点击的命中行。
+/// 全文搜索面板：文件名 + 内容。
 class SearchPanel extends StatefulWidget {
   const SearchPanel({
     super.key,

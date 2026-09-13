@@ -116,7 +116,6 @@ class _TabStrip extends StatelessWidget {
   }
 }
 
-/// 格式工具条：把常用 Markdown 语法做成按钮，插入到光标处。
 class _FormatBar extends StatelessWidget {
   const _FormatBar({required this.state});
 
@@ -131,11 +130,7 @@ class _FormatBar extends StatelessWidget {
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      // 横向可滚动，而不是固定 Row。
-      //
-      // 工具条有 14 个按钮；当三栏全开、frontmatter 面板也打开时，编辑器宽度可能只剩
-      // 400 多像素，固定 Row 会溢出（实测溢出 122 px）并在界面上画出黄黑警示条。
-      // 常见编辑器（VS Code / Typora）也都是让工具栏滚动或折叠，而不是让它溢出。
+      // 横向可滚动：三栏全开时编辑器可能只剩 400 多像素，固定 Row 会溢出。
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 6),

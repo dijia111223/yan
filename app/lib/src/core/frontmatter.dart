@@ -1,11 +1,7 @@
 import 'package:yaml/yaml.dart';
 import 'package:yaml_edit/yaml_edit.dart';
 
-/// frontmatter 解析结果。
-///
-/// 宪章第 7 节：编辑器的 frontmatter 字段 = 统一语料层规范，
-/// 是"体用组合"的焊接点。因此这里必须做到 **无损**：
-/// 未识别的字段、注释、字段顺序在回写时都要保留。
+/// frontmatter 解析结果。回写必须无损，未识别的字段、注释、字段顺序都要保留。
 class Frontmatter {
   const Frontmatter({
     required this.hasFrontmatter,
@@ -14,16 +10,12 @@ class Frontmatter {
     required this.body,
   });
 
-  /// 文件中是否存在 frontmatter 块（`---` 开头并以 `---`/`...` 结束）。
   final bool hasFrontmatter;
 
-  /// 解析出的字段（顶层映射）。解析失败时为只读空映射。
   final Map<String, Object?> fields;
 
-  /// frontmatter 的原始文本（不含两侧分隔符行）。
   final String raw;
 
-  /// 去掉 frontmatter 之后的正文。
   final String body;
 
   static const Frontmatter none = Frontmatter(
@@ -35,7 +27,7 @@ class Frontmatter {
 
   bool get isEmpty => !hasFrontmatter || fields.isEmpty;
 
-  /// frontmatter + 正文重新拼成完整文件内容。
+  /// frontmatter + 正文拼成完整文件内容。
   String reconstruct(String newRaw, String newBody) {
     final buffer = StringBuffer('---\n');
     var rawText = newRaw;
@@ -43,14 +35,12 @@ class Frontmatter {
     buffer.write(rawText);
     buffer.write('---\n');
     if (newBody.isNotEmpty) {
-      // 分隔符与正文之间保留一个空行，读起来更像文档
       if (!newBody.startsWith('\n')) buffer.write('\n');
       buffer.write(newBody);
     }
     return buffer.toString();
   }
 
-  /// 取字符串字段。
   String? string(String key) {
     final value = fields[key];
     if (value == null) return null;
@@ -58,7 +48,7 @@ class Frontmatter {
     return value.toString();
   }
 
-  /// 取字段并统一成字符串列表（兼容 `tags: a` 与 `tags: [a, b]` 两种写法）。
+  /// 兼容 `tags: a` 与 `tags: [a, b]` 两种写法。
   List<String> stringList(String key) {
     final value = fields[key];
     return switch (value) {
@@ -80,7 +70,7 @@ class Frontmatter {
     return DateTime.tryParse(value.toString().trim());
   }
 
-  /// 语料层规范字段（与知识库蓝图统一，血缘字段先预留）。
+  /// 语料层规范字段。
   static const List<String> corpusFields = <String>[
     'title',
     'created',
@@ -90,7 +80,7 @@ class Frontmatter {
     'lineage',
   ];
 
-  /// 生成一份符合语料层规范的缺省 frontmatter（新建笔记时使用）。
+  /// 缺省 frontmatter，新建笔记时用。
   static String defaultTemplate({
     required String title,
     DateTime? now,
@@ -102,7 +92,6 @@ class Frontmatter {
       'updated: $stamp',
       'tags: []',
       'source: ""',
-      '# lineage: 血缘字段预留，与知识库蓝图统一语料层规范对齐（宪章 §7）',
       '# lineage:',
       '#   derived_from: []',
     ].join('\n');
@@ -126,13 +115,9 @@ class Frontmatter {
 class FrontmatterCodec {
   const FrontmatterCodec._();
 
-  /// 分隔符行。
   static final RegExp _fence = RegExp(r'^(---|\.\.\.)\s*$');
 
-  /// 解析 [content] 中的 frontmatter。
-  ///
-  /// 容忍这几种情况：完全没有 frontmatter、YAML 语法错误（[fields] 退化为空）、
-  /// CRLF 行尾、文件开头有空行。永不抛异常——编辑器的容错优先于严格。
+  /// 解析 [content] 中的 frontmatter；永不抛异常，容错优先。
   static Frontmatter parse(String content) {
     if (content.isEmpty) {
       return const Frontmatter(
@@ -146,7 +131,6 @@ class FrontmatterCodec {
     final normalized = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final lines = normalized.split('\n');
 
-    // 允许 BOM 与开头空行
     var start = 0;
     while (start < lines.length && lines[start].trim().isEmpty) {
       start++;
@@ -179,7 +163,6 @@ class FrontmatterCodec {
 
     final raw = lines.sublist(start + 1, end).join('\n');
     var bodyLines = lines.sublist(end + 1);
-    // 去掉分隔符后的第一个空行，保持正文干净
     if (bodyLines.isNotEmpty && bodyLines.first.trim().isEmpty) {
       bodyLines = bodyLines.sublist(1);
     }
@@ -193,7 +176,6 @@ class FrontmatterCodec {
         fields = _toPlainMap(doc);
       }
     } on YamlException {
-      // YAML 写坏了也不能让编辑器崩：字段退化为空，raw 仍然保留原样
       fields = const <String, Object?>{};
     }
 
@@ -207,7 +189,6 @@ class FrontmatterCodec {
 
   static bool _isOpeningFence(String line) => line.trim() == '---';
 
-  /// YamlMap -> 普通 Map（递归），便于 UI 层安全读取。
   static Map<String, Object?> _toPlainMap(Map<Object?, Object?> source) {
     final result = <String, Object?>{};
     for (final entry in source.entries) {
@@ -226,10 +207,7 @@ class FrontmatterCodec {
     };
   }
 
-  /// 用 [updates] 更新 [content] 中的 frontmatter，**保留其它字段与注释**。
-  ///
-  /// [removeKeys] 中的字段会被删除。frontmatter 不存在时按需创建。
-  /// 返回新的完整文件内容；失败时返回原内容（编辑器的容错优先）。
+  /// 更新 [content] 中的 frontmatter，保留其它字段与注释。
   static String update(
     String content, {
     Map<String, Object?> updates = const <String, Object?>{},
@@ -248,7 +226,6 @@ class FrontmatterCodec {
       final editor = YamlEditor(raw.isEmpty ? '{}' : raw);
       for (final key in removeKeys) {
         if (updates.containsKey(key)) continue;
-        // orElse 必须返回一个 YamlNode，这里用空标量表示"字段不存在"
         final existing = editor.parseAt(
           <String>[key],
           orElse: () => YamlScalar.wrap(null),
@@ -262,16 +239,15 @@ class FrontmatterCodec {
       }
       raw = editor.toString();
     } on YamlException {
-      // 原始 YAML 有语法错误时退化为整体重写，保证用户至少能存下字段
       raw = _dumpMap(<String, Object?>{...parsed.fields, ...updates});
     } on ArgumentError {
+      // yaml_edit 对非法键路径抛 ArgumentError，同样退化为整体重写
       raw = _dumpMap(<String, Object?>{...parsed.fields, ...updates});
     }
 
     return parsed.reconstruct(raw, parsed.body);
   }
 
-  /// 保证 [content] 含有 frontmatter；缺失时按语料层规范补齐。
   static String ensureFrontmatter(String content, {String? title}) {
     final parsed = parse(content);
     if (parsed.hasFrontmatter) return content;
@@ -295,7 +271,7 @@ class FrontmatterCodec {
     return '未命名';
   }
 
-  /// 把 Map 序列化成 YAML（只在无法做字段级编辑时使用）。
+  /// 把 Map 序列化成 YAML。
   static String _dumpMap(Map<String, Object?> values) {
     final buffer = StringBuffer();
     for (final entry in values.entries) {

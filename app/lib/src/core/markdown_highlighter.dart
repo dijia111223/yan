@@ -2,22 +2,17 @@ import 'package:flutter/material.dart';
 
 import 'markdown_theme.dart';
 
-/// Markdown 源码高亮器。
-///
-/// v1 的关键取舍：不用 WebView、不引第三方高亮插件（`flutter_highlight`
-/// 等已停更且不兼容 Dart 3.13），而是自己做一个行级 + 行内两级词法扫描。
-/// 这样零依赖、可单测，也能把 frontmatter 当成一等公民来着色。
+/// Markdown 源码高亮器：两遍扫描——第一遍按行定级（frontmatter / 围栏 / 标题 / 列表 / 表格），
+/// 第二遍扫行内。不引第三方高亮插件（flutter_highlight 等已停更、不兼容 Dart 3.13）。
 class MarkdownHighlighter {
   const MarkdownHighlighter(this.theme);
 
   final MarkdownTheme theme;
 
-  /// 超过这个行数就放弃高亮（直接返回纯文本），保证大文件输入不卡。
+  /// 超过此行数直接退化为纯文本。
   static const int maxHighlightedLines = 8000;
 
-  /// 把 [source] 变成带样式的 [TextSpan]。
-  ///
-  /// 永不抛异常：任何异常都退化为纯文本，编辑体验优先。
+  /// 永不抛异常：出错就退化为纯文本。
   TextSpan highlight(String source, {int? start, int? end}) {
     final effectiveStart = start ?? 0;
     final effectiveEnd = end ?? source.length;
@@ -32,11 +27,8 @@ class MarkdownHighlighter {
   }
 
   TextSpan _highlightRange(String source, int start, int end) {
-    // 行首偏移表：把行号映射回源码下标。
-    //
-    // 注意末尾换行：`"a\n"` 的行首表必须是 [0, 2]。若写成 `i + 1 < end`，
-    // 末尾换行会被漏掉，整段内容就被当成"一行"，行级语法（标题/列表/表格）
-    // 全部失效——这是一个非常隐蔽的 off-by-one。
+    // 行首偏移表。末尾换行也要单独占一行：写成 `i + 1 < end` 会漏掉它，
+    // 整段会被当成一行，行级语法全部失效。
     final lineStarts = <int>[start];
     for (var i = start; i < end; i++) {
       if (source.codeUnitAt(i) == 0x0A) {
@@ -47,7 +39,6 @@ class MarkdownHighlighter {
       return TextSpan(text: source.substring(start, end), style: theme.body);
     }
 
-    // 第一遍：行级扫描，标记出 frontmatter 与围栏代码块
     final states = <_LineState>[];
     var inFrontmatter = false;
     var fenceChar = '';
@@ -55,9 +46,8 @@ class MarkdownHighlighter {
 
     for (var i = 0; i < lineStarts.length; i++) {
       final lineStart = lineStarts[i];
-      // lineEnd 指向换行符本身（不含），行级正则因此总能拿到干净的行尾
+      // lineEnd 不含换行符，行级正则才能拿到干净行尾
       final lineEnd = i + 1 < lineStarts.length ? lineStarts[i + 1] - 1 : end;
-      // 换行单独补一个 span，保证拼接后与源码逐字符一致
       final hasNewline = lineEnd < end && source.codeUnitAt(lineEnd) == 0x0A;
       final line = source.substring(lineStart, lineEnd);
 
@@ -141,7 +131,6 @@ class MarkdownHighlighter {
       );
     }
 
-    // 第二遍：按行产出 span
     final spans = <TextSpan>[];
     for (final state in states) {
       spans.addAll(_lineSpans(source, state));
@@ -149,7 +138,6 @@ class MarkdownHighlighter {
     return TextSpan(style: theme.body, children: spans);
   }
 
-  /// 返回 (围栏字符, 长度)，非围栏行返回 null。
   static (String, int)? _openingFence(String line) {
     var i = 0;
     while (i < line.length && i < 4 && line[i] == ' ') {
@@ -206,7 +194,6 @@ class MarkdownHighlighter {
     final colon = content.indexOf(':');
 
     if (colon > 0) {
-      // `  - key: value` 这种列表项也要正确着色
       final leading = RegExp(r'^\s*-\s*').firstMatch(content);
       if (leading != null) {
         spans.add(TextSpan(text: leading.group(0), style: theme.frontmatterFence));
@@ -229,11 +216,9 @@ class MarkdownHighlighter {
     return spans;
   }
 
-  /// 行级元素（标题 / 引用 / 列表 / 分隔线 / 表格）与行内元素。
   List<TextSpan> _normalLineSpans(String line) {
     if (line.isEmpty) return <TextSpan>[TextSpan(text: '', style: theme.body)];
 
-    // 分隔线
     if (RegExp(r'^\s{0,3}([-*_])(\s*\1){2,}\s*$').hasMatch(line)) {
       return <TextSpan>[TextSpan(text: line, style: theme.rule)];
     }
@@ -242,7 +227,7 @@ class MarkdownHighlighter {
     if (heading != null) {
       final level = heading.group(2)!.length;
       final textStart = heading.end - heading.group(4)!.length;
-      // 闭合式标题 `## 标题 ##`：尾部的 # 只作为标记着色，不参与行内解析
+      // 闭合式标题 `## x ##`：尾部 # 只着色，不参与行内解析
       final trailing = RegExp(r'(\s+)(#+)\s*$').firstMatch(line);
       final hasTrailingFence = trailing != null && trailing.start >= textStart;
       final contentEnd = hasTrailingFence ? trailing.start : line.length;
@@ -268,7 +253,6 @@ class MarkdownHighlighter {
       return spans;
     }
 
-    // 引用
     final quote = RegExp(r'^(\s{0,3})(>+\s?)(.*)$').firstMatch(line);
     if (quote != null) {
       final marker = quote.group(2)!;
@@ -284,7 +268,6 @@ class MarkdownHighlighter {
       return spans;
     }
 
-    // 列表项（无序 / 有序 / 任务列表）
     final list = RegExp(r'^(\s*)([-*+]|\d+[.)])(\s+)(.*)$').firstMatch(line);
     if (list != null) {
       final rest = list.group(4)!;
@@ -294,7 +277,6 @@ class MarkdownHighlighter {
         TextSpan(text: list.group(2), style: theme.listMarker),
         TextSpan(text: list.group(3), style: theme.body),
       ];
-      // 任务列表复选框
       final task = RegExp(r'^(\[[ xX]\])(\s*)(.*)$').firstMatch(rest);
       if (task != null) {
         spans.add(TextSpan(text: task.group(1), style: theme.listMarker));
@@ -308,7 +290,6 @@ class MarkdownHighlighter {
       return spans;
     }
 
-    // 表格行：以 `|` 开头的整行按单元格着色
     if (line.trimLeft().startsWith('|') && line.contains('|', line.indexOf('|') + 1)) {
       return _tableSpans(line);
     }
@@ -336,9 +317,7 @@ class MarkdownHighlighter {
     return spans;
   }
 
-  /// 行内扫描：代码 > 图片 > 链接 > 粗斜体 > 强调 > 删除线 > 数学。
-  ///
-  /// [offset] 是 [text] 在整行中的起始下标，仅用于文档说明（本实现按片段局部扫描）。
+  /// 行内扫描，优先级：代码 > 图片 > 链接 > 粗斜体 > 粗体 > 斜体 > 删除线 > 数学。
   List<TextSpan> _inlineSpans(
     String text, {
     required TextStyle base,
@@ -387,7 +366,6 @@ class MarkdownHighlighter {
   }
 
   TextSpan _styledMatch(RegExpMatch match, TextStyle base, String text) {
-    // 行内代码
     if (match.group(1) != null) {
       final ticks = match.group(1)!;
       final code = match.group(2) ?? '';
@@ -403,7 +381,6 @@ class MarkdownHighlighter {
       );
     }
 
-    // 图片
     if (match.group(3) != null) {
       return TextSpan(
         children: <TextSpan>[
@@ -417,7 +394,6 @@ class MarkdownHighlighter {
       );
     }
 
-    // 链接
     if (match.group(5) != null) {
       return TextSpan(
         children: <TextSpan>[
@@ -431,7 +407,6 @@ class MarkdownHighlighter {
       );
     }
 
-    // 粗体 / 斜体 / 删除线 / 行内数学：保留标记符号但弱化
     final (marker, content, style) = switch (match) {
       _ when match.group(7) != null => ('***', match.group(7)!, base.merge(theme.emphasis).merge(theme.italic)),
       _ when match.group(8) != null => ('**', match.group(8)!, base.merge(theme.emphasis)),
@@ -462,7 +437,6 @@ class MarkdownHighlighter {
 
   static final RegExp _bareUrl = RegExp(r'^(https?://\S+)$');
 
-  /// 裸链接（GFM 自动链接）单独着色。
   TextSpan? _autolink(String text, TextStyle base) {
     final match = _bareUrl.firstMatch(text.trim());
     if (match == null) return null;
@@ -483,9 +457,8 @@ class _LineState {
   final _LineKind kind;
   final int lineStart;
 
-  /// 行尾下标（不含换行符）。
   final int lineEnd;
 
-  /// 该行是否以换行符结束——换行要单独补一个 span，不能丢。
+  /// 换行要单独补 span，否则拼接后与源码不一致。
   final bool hasNewline;
 }

@@ -9,19 +9,9 @@ import '../core/math_text.dart';
 
 /// Markdown 预览：GFM（表格 / 任务列表 / 删除线 / 自动链接）+ LaTeX 公式。
 ///
-/// 设计要点（踩过坑，别改回去）
-/// --------------------------
-/// **只替换 `pre` / `code` / `blockquote` 这三类块级元素，绝不替换 `p` 或标题。**
-///
-/// `flutter_markdown` 的 `MarkdownBuilder` 用一个 `_inlines` 栈来拼行内片段，
-/// 并在 `build()` 结尾断言 `_inlines.isEmpty`。当自定义 builder 替换掉 `<p>`
-/// 这类**内含行内子节点**的块时，它自己 pop 出来的 inline 不会被正常出栈，
-/// 断言随即失败——表现是**一打开有正文的笔记就崩**。
-///
-/// 因此：
-/// * 行内公式在 `MathExtractor` 阶段就转成 Unicode 文本，交给库正常排版；
-/// * 行间公式被预处理成 `> <占位符>` 块引用，这里用 `blockquote` builder
-///   整体替换成公式组件（块引用没有行内子节点，替换是安全的）。
+/// 只替换 pre / code / blockquote，绝不替换 p 或标题：替换 `<p>` 会让
+/// flutter_markdown 的 `_inlines` 栈失衡，一打开有正文的笔记就触发 `_inlines.isEmpty` 断言。
+/// 行内公式在 MathExtractor 阶段已转成 Unicode 文本。
 class MarkdownPreview extends StatelessWidget {
   const MarkdownPreview({
     super.key,
@@ -35,7 +25,6 @@ class MarkdownPreview extends StatelessWidget {
   /// 已由 [MathExtractor.extract] 处理过的 Markdown。
   final String source;
 
-  /// 行间公式表。
   final Map<String, MathFragment> fragments;
 
   final MarkdownTheme mdTheme;
@@ -122,7 +111,6 @@ class _DisplayMathBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) {
     final index = MathExtractor.placeholderIndex(element.textContent);
-    // 不是公式块引用：返回 null，交回库按普通引用渲染
     if (index == null) return null;
     final fragment = fragments[MathExtractor.placeholder(index)];
     if (fragment == null) return null;
@@ -134,7 +122,6 @@ class _DisplayMathBuilder extends MarkdownElementBuilder {
   }
 }
 
-/// 块级代码卡片：语言标签 + 自研轻量高亮。
 class _CodeCardBuilder extends MarkdownElementBuilder {
   _CodeCardBuilder(this.theme);
 
@@ -147,7 +134,6 @@ class _CodeCardBuilder extends MarkdownElementBuilder {
     TextStyle? preferredStyle,
     TextStyle? parentStyle,
   ) {
-    // `<pre>` 里通常是一个带 language-xxx 的 <code>
     String language = '';
     var code = element.textContent;
     final children = element.children;
@@ -156,14 +142,12 @@ class _CodeCardBuilder extends MarkdownElementBuilder {
       language = (inner.attributes['class'] ?? '').replaceFirst('language-', '');
       code = inner.textContent;
     }
-    // 末尾换行会多撑出一行空白
     if (code.endsWith('\n')) code = code.substring(0, code.length - 1);
 
     return _CodeCard(code: code, language: language, theme: theme);
   }
 }
 
-/// 带语言标记的 `<code>` 仍按卡片渲染；真正的行内代码返回 null 交回库处理。
 class _InlineCodeWithLanguageBuilder extends MarkdownElementBuilder {
   _InlineCodeWithLanguageBuilder(this.theme);
 
@@ -226,10 +210,6 @@ class _CodeCard extends StatelessWidget {
   }
 }
 
-/// 轻量代码高亮（零依赖）。
-///
-/// 不做完整词法分析——只覆盖注释 / 字符串 / 数字 / 关键字，
-/// 对"看代码时能分清结构"这个目标足够，也符合宪章"小而锋利"的原则。
 class CodeHighlighter {
   const CodeHighlighter(this.theme, this.language);
 
@@ -385,7 +365,7 @@ class CodeHighlighter {
   }
 }
 
-/// 行间公式组件。渲染失败时优雅退化为可读文本（绝不红屏）。
+/// 渲染失败时退化为 Unicode 文本，不红屏。
 class _Formula extends StatelessWidget {
   const _Formula({required this.tex, required this.theme});
 
@@ -394,8 +374,6 @@ class _Formula extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 兜底：渲染不了时把公式**转成 Unicode 可读文本**，
-    // 而不是原样吐 LaTeX 源码——后者对用户几乎没有价值。
     final readable = latexToUnicode(tex) ?? tex;
     final fallback = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

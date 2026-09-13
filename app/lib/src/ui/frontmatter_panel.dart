@@ -4,11 +4,8 @@ import '../core/frontmatter.dart';
 import '../core/typography.dart';
 import '../state/workspace.dart';
 
-/// frontmatter 读写面板。
-///
-/// 宪章第 7 节：编辑器的 frontmatter 字段 = 统一语料层规范。这里让规范字段
-/// 表单化可编辑，同时保留"原始 YAML"入口，保证未识别字段与注释不会因为
-/// 可视化编辑而丢失。
+/// frontmatter 读写面板：规范字段表单化编辑，另留原始 YAML 入口。
+/// 原样重建保证未识别字段与 YAML 注释不会因可视化编辑而丢失。
 class FrontmatterPanel extends StatefulWidget {
   const FrontmatterPanel({super.key, required this.state});
 
@@ -157,7 +154,6 @@ class _RawEditorView extends StatelessWidget {
               maxLines: null,
               expands: true,
               textAlignVertical: TextAlignVertical.top,
-              // YAML 源码用等宽字体，方便对齐与缩进
               style: AppFonts.monoStyle(theme.textTheme.bodySmall).copyWith(height: 1.55),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
@@ -182,7 +178,6 @@ class _FieldFormView extends StatelessWidget {
   final WorkspaceState state;
   final Frontmatter fm;
 
-  /// 表单负责的规范字段。
   static const List<String> structured = <String>[
     'title',
     'created',
@@ -296,7 +291,6 @@ class _ScalarFieldState extends State<_ScalarField> {
   @override
   void initState() {
     super.initState();
-    // 失焦即保存，符合"表单即文件"的直觉
     _focus.addListener(() {
       if (!_focus.hasFocus) _commit();
     });

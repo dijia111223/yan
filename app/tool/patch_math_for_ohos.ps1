@@ -1,25 +1,16 @@
-﻿# 让 flutter_math_fork 能在鸿蒙版 Flutter（3.27.x）下编译。
+# 让 flutter_math_fork 0.7.4 能在 Flutter 3.27.x 下编译。
 #
-# 背景（本次鸿蒙适配里最硬的生态卡点）
-# ------------------------------------
-# `flutter_math_fork 0.7.4`（pub 上的最新版）是按**更新的 Flutter** 写的，与鸿蒙分支的
-# Flutter 3.27.x 有两类不兼容：
+# 两处不兼容：
+#   1. 它用了 `RenderObjectWithLayoutCallbackMixin` / `runLayoutCallback()` —— Flutter 3.47
+#      才有的 API，3.27 没有。
+#   2. 鸿蒙分支给 `TargetPlatform` 新增了 `ohos`，该包 4 处穷尽 `switch (platform)` 编译失败。
 #
-#   1. `RenderObjectWithLayoutCallbackMixin` 与 `runLayoutCallback()` 是 **Flutter 3.47**
-#      才加入的 API（见 3.47 的 `rendering/object.dart`），3.27 里不存在；
-#      该包在 `lib/src/render/layout/layout_builder_baseline.dart` 里用了它。
-#   2. 鸿蒙分支给 `TargetPlatform` 枚举**新增了 `ohos` 值**，于是第三方包里所有
-#      `switch (platform)` 的穷尽匹配都编译失败 —— 该包共 4 处。
+# 改的是 pub 缓存里的包，所以换 PUB_CACHE 或 pub cache clean 之后要重跑。
+# 幂等。
 #
-# 本脚本把这两类问题就地修掉，是幂等的。
+# 逐行插入而非 -replace：PowerShell 会把引号后的 $1case 当成变量名 $1case，
+# 导致插入内容并进上一行、把文件改坏。
 #
-# 实现说明（踩过坑，别改回正则）：
-# 这里**按下标逐行插入**，不用 `-replace`。之前用正则生成
-# `case TargetPlatform.ohos: ...case TargetPlatform.windows:` 时，PowerShell 把
-# "`$1case" 解析成未定义变量 `$1case` + 字面量 `case`，插入的行被并进上一行、
-# 把文件改坏了。逐行处理能精确保留缩进与行尾。
-#
-# 用法：
 #     powershell -NoProfile -ExecutionPolicy Bypass -File tool/patch_math_for_ohos.ps1
 
 [CmdletBinding()]

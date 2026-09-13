@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../state/workspace_scope.dart';
 import 'platform_file_picker.dart';
 
-/// 首次启动的欢迎页：打开一个文件夹当作库。
+/// 没有库时显示的欢迎页。
 class WelcomeView extends StatelessWidget {
   const WelcomeView({super.key});
 

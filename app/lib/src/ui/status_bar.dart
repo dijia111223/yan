@@ -3,7 +3,7 @@ import 'package:path/path.dart' as p;
 
 import '../state/workspace.dart';
 
-/// 状态栏：光标位置、字数、保存状态、frontmatter 提示。
+/// 状态栏：光标位置、字数、保存状态与提示。
 class StatusBar extends StatelessWidget {
   const StatusBar({super.key, required this.state});
 

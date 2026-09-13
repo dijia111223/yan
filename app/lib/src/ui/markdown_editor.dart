@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import '../state/editor_controller.dart';
 
 /// 源码编辑器：行号栏 + 语法高亮文本域。
-///
-/// 高亮由 [MarkdownEditingController] 在绘制阶段完成，这里只负责
-/// 排版、滚动同步与外观。
 class MarkdownEditor extends StatefulWidget {
   const MarkdownEditor({
     super.key,
@@ -39,7 +36,6 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
   final ScrollController _gutter = ScrollController();
   bool _syncing = false;
 
-  /// 行号栏宽度约束：数字位数变化时正文不应左右晃动。
   static const double gutterMinWidth = 46;
   static const double gutterDigitWidth = 8.2;
 
@@ -49,7 +45,6 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
     _vertical.addListener(_syncGutter);
   }
 
-  /// 行号栏跟随正文滚动。
   void _syncGutter() {
     if (_syncing || !_gutter.hasClients) return;
     _syncing = true;
@@ -96,7 +91,7 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
           Expanded(
             child: TextField(
               controller: widget.controller,
-              // 搜索跳转需要按行滚动，锚点挂在 EditableText 上
+              // 搜索跳转按行滚动，锚点挂在这个 key 上
               key: widget.controller.editableKey,
               scrollController: _vertical,
               maxLines: null,
@@ -107,7 +102,6 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
               style: widget.textStyle,
               cursorColor: widget.selectionColor,
               cursorWidth: 2,
-              // 源码模式：不做任何输入过滤，Markdown 原样进出
               enableIMEPersonalizedLearning: false,
               smartDashesType: SmartDashesType.disabled,
               smartQuotesType: SmartQuotesType.disabled,
@@ -128,9 +122,7 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
   }
 }
 
-/// 行号栏。
-///
-/// 不参与滚动交互，只被动跟随正文的滚动偏移，避免出现两条滚动条的怪状。
+/// 行号栏被动跟随正文滚动偏移，自身不参与滚动交互。
 class _LineNumberGutter extends StatelessWidget {
   const _LineNumberGutter({
     required this.controller,

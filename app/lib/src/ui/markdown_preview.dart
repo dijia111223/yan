@@ -33,19 +33,25 @@ class MarkdownPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MarkdownBody(
-      data: source,
-      selectable: true,
-      styleSheet: _styleSheet(context, mdTheme),
-      extensionSet: md.ExtensionSet.gitHubWeb,
-      onTapLink: (text, href, title) {
-        if (href != null && onTapLink != null) onTapLink!(href);
-      },
-      builders: <String, MarkdownElementBuilder>{
-        'pre': _CodeCardBuilder(mdTheme),
-        'code': _InlineCodeWithLanguageBuilder(mdTheme),
-        'blockquote': _DisplayMathBuilder(mdTheme, fragments),
-      },
+    // MarkdownBody 自己不带滚动 —— 直接把 <p> 换成滚动容器又会踩
+    // flutter_markdown 的 inline 记账断言（见本文件顶部说明）。
+    // 正确做法是在外面套一层：内容照旧交给 MarkdownBody 排版，滚动由这里负责。
+    return SingleChildScrollView(
+      padding: padding,
+      child: MarkdownBody(
+        data: source,
+        selectable: true,
+        styleSheet: _styleSheet(context, mdTheme),
+        extensionSet: md.ExtensionSet.gitHubWeb,
+        onTapLink: (text, href, title) {
+          if (href != null && onTapLink != null) onTapLink!(href);
+        },
+        builders: <String, MarkdownElementBuilder>{
+          'pre': _CodeCardBuilder(mdTheme),
+          'code': _InlineCodeWithLanguageBuilder(mdTheme),
+          'blockquote': _DisplayMathBuilder(mdTheme, fragments),
+        },
+      ),
     );
   }
 

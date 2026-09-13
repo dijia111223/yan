@@ -1,4 +1,4 @@
-# Capture screenshots from the running Windows app.
+﻿# Capture screenshots from the running Windows app.
 # Images come from the release binary, not mock-ups.
 
 [CmdletBinding()]

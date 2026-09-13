@@ -1,4 +1,4 @@
-# 临时把 integration_test 加进 pubspec，跑完桌面端集成测试后再还原。
+﻿# 临时把 integration_test 加进 pubspec，跑完桌面端集成测试后再还原。
 #
 # pubspec 里不写 integration_test：鸿蒙 fork 自报 0.0.0-unknown，
 # 而它要求 Flutter >= 3.18，会让鸿蒙线 pub 求解失败。

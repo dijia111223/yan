@@ -1,4 +1,4 @@
-# Prepare Flutter plugin links on Windows without Developer Mode.
+﻿# Prepare Flutter plugin links on Windows without Developer Mode.
 #
 # Flutter links plugins from the pub cache into
 # windows/flutter/ephemeral/.plugin_symlinks/ with symbolic links, which need

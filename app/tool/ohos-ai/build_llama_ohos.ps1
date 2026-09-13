@@ -78,13 +78,35 @@ if (Test-Path $biIn) {
 # GPU/NPU 后端涉及驱动与厂商 SDK，是另一件事。
 $sources = New-Object System.Collections.Generic.List[string]
 
-Get-ChildItem "$LlamaSrc\src" -Filter '*.cpp' | ForEach-Object { $sources.Add($_.FullName) }
+Get-ChildItem "$LlamaSrc\src" -Filter '*.cpp' -Recurse | ForEach-Object { $sources.Add($_.FullName) }
+# src 必须**递归**：src/models/ 下有 150+ 个模型架构实现，只扫顶层会漏掉它们。
+# 漏了不一定立刻报错 —— 模型注册表是静态初始化，只有真去加载那个架构才会
+# 链接期或运行期失败。Qwen3 恰好是顶层的 qwen3.cpp，所以只测 Qwen3 时看不出来。
 # 必须**递归**：common 下有子目录（common/parsers/ 等），
 # 只扫顶层会漏掉 lfm2.cpp / parsers.cpp，链接时报 undefined symbol。
 Get-ChildItem "$LlamaSrc\common" -Filter '*.cpp' -Recurse | ForEach-Object { $sources.Add($_.FullName) }
-foreach ($f in @('ggml.c', 'ggml-alloc.c', 'ggml-quants.c', 'ggml-backend.cpp', 'ggml-backend-reg.cpp', 'ggml-threading.cpp', 'ggml-opt.cpp')) {
-    $p = Join-Path "$LlamaSrc\ggml\src" $f
-    if (Test-Path $p) { $sources.Add($p) }
+# ggml/src 顶层文件。
+# **不要手写文件名清单** —— 写死清单会持续漏掉新增文件，而且漏了只在链接期报缺符号，
+# 甚至只在你换用法时才暴露。实测漏过 gguf.cpp（→ undefined symbol: gguf_init_from_file）、
+# ggml-backend-dl.cpp、ggml-backend-meta.cpp。
+# 这里扫目录，只跳过厂商后端子目录（它们要各自的 SDK）。
+$ggmlSrc = "$LlamaSrc\ggml\src"
+$ggmlSkip = @('ggml-blas', 'ggml-cann', 'ggml-cuda', 'ggml-et', 'ggml-hexagon', 'ggml-hip',
+              'ggml-metal', 'ggml-musa', 'ggml-opencl', 'ggml-openvino', 'ggml-rpc', 'ggml-sycl',
+              'ggml-virtgpu', 'ggml-vulkan', 'ggml-webgpu', 'ggml-zdnn', 'ggml-zendnn', 'ggml-cpu')
+Get-ChildItem $ggmlSrc -Include '*.c','*.cpp' -Recurse | Where-Object {
+    $rel = $_.FullName.Substring($ggmlSrc.Length).TrimStart('\')
+    # 只要顶层文件；子目录按上面的名单处理
+    $rel -notmatch '[\\/]'
+} | ForEach-Object { $sources.Add($_.FullName) }
+Write-Host "  ggml/src 顶层文件已收集" -ForegroundColor DarkGray
+
+# vendor/cpp-httplib：common 的 download.cpp / hf-cache.cpp 会用到。
+# 少了报一大串 undefined symbol: httplib::Client::* 。
+$httplib = "$LlamaSrc\vendor\cpp-httplib"
+if (Test-Path $httplib) {
+    Get-ChildItem $httplib -Filter '*.cpp' | ForEach-Object { $sources.Add($_.FullName) }
+    Write-Host "  vendor/cpp-httplib 已收集" -ForegroundColor DarkGray
 }
 # ggml-cpu 里的 CPU 内核。
 # 注意：ggml-cpu/arch 下按架构分目录，只该编**目标架构 + 通用部分** ——
@@ -146,8 +168,12 @@ foreach ($s in $sources) {
     $i++
     # 用**相对路径**做唯一键：ggml-cpu 下不同 arch 目录里有同名文件
     # （arm/quants.c 与 x86/quants.c），只用 basename 会让它们互相覆盖。
+    #
+    # 扩展名必须保留：ggml-cpu.c 与 ggml-cpu.cpp 去掉扩展名后同名，
+    # 只留一个会让另一个**永远不参与编译**，链接时才报缺符号。
+    # 把扩展名的点也换成连字符，得到 …-c.o / …-cpp.o。
     $rel = $s.Substring($LlamaSrc.Length).TrimStart('\')
-    $key = ($rel -replace '[\\/]', '-') -replace '\.(c|cpp)$', ''
+    $key = ($rel -replace '[\\/]', '-') -replace '\.(c|cpp)$', '-$1'
     $obj = Join-Path "$out\obj" "$key.o"
     $objects.Add($obj)
 

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,6 +24,10 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
+  /// 窄屏时顶栏的汉堡按钮要打开抽屉；_TopBar 的 context 在 Scaffold 之上，
+  /// Scaffold.of 拿不到，所以用 key 直接开。
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   double _sidebarWidth = 248;
 
   /// 预览栏默认宽度：再窄表格 / 公式 / 代码块就要横向滚动。
@@ -42,6 +48,15 @@ class _ShellState extends State<Shell> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
+            key: _scaffoldKey,
+            // 窄屏时文件树走抽屉；宽屏不用抽屉（分栏并排）。用 LayoutBuilder 的宽度判断，
+            // 而 Scaffold.drawer 需要在 build 时就决定，所以这里用 MediaQuery 宽度。
+            drawer: MediaQuery.sizeOf(context).width < 860 && state.hasLibrary
+                ? Drawer(
+                    width: math.min(300, MediaQuery.sizeOf(context).width * 0.82),
+                    child: SafeArea(child: FileTree(state: state)),
+                  )
+                : null,
             // 鸿蒙手机默认全屏（引擎里 isDefaultFullScreen() 对非 2in1 设备返回 true），
             // 内容会画到状态栏/导航栏下面，必须靠 SafeArea 避让，否则顶栏与系统栏重叠。
             body: SafeArea(
@@ -51,44 +66,55 @@ class _ShellState extends State<Shell> {
                   state: state,
                   searchOpen: _searchOpen,
                   onToggleSearch: _toggleSearch,
+                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                 ),
                 if (_searchOpen)
                   SearchPanel(state: state, onClose: () => setState(() => _searchOpen = false)),
                 Expanded(
                   child: !state.hasLibrary
                       ? const WelcomeView()
-                      : Row(
-                          children: <Widget>[
-                            if (state.showSidebar) ...<Widget>[
-                              SizedBox(
-                                width: _sidebarWidth,
-                                child: FileTree(state: state),
-                              ),
-                              _Splitter(
-                                onDrag: (delta) => setState(() {
-                                  _sidebarWidth = (_sidebarWidth + delta).clamp(170.0, 460.0);
-                                }),
-                              ),
-                            ] else
-                              _EdgeToggle(
-                                icon: Icons.chevron_right_rounded,
-                                tooltip: '显示文件树 (Ctrl+B)',
-                                onPressed: state.toggleSidebar,
-                              ),
-                            Expanded(child: EditorPane(state: state)),
-                            if (state.showPreview) ...<Widget>[
-                              _Splitter(
-                                onDrag: (delta) => setState(() {
-                                  _previewWidth = (_previewWidth - delta).clamp(240.0, 900.0);
-                                }),
-                              ),
-                              SizedBox(
-                                width: _previewWidth,
-                                child: _PreviewPane(state: state),
-                              ),
-                            ],
-                            if (state.showFrontmatter) FrontmatterPanel(state: state),
-                          ],
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            // 窄屏（手机）：文件树走抽屉，编辑与预览整体切换。
+                            // 并排三栏在竖屏上每栏只剩两三百像素，没法用。
+                            final narrow = constraints.maxWidth < 860;
+                            if (narrow) {
+                              return _MobileContent(state: state, previewing: state.showPreview);
+                            }
+                            return Row(
+                              children: <Widget>[
+                                if (state.showSidebar) ...<Widget>[
+                                  SizedBox(
+                                    width: _sidebarWidth,
+                                    child: FileTree(state: state),
+                                  ),
+                                  _Splitter(
+                                    onDrag: (delta) => setState(() {
+                                      _sidebarWidth = (_sidebarWidth + delta).clamp(170.0, 460.0);
+                                    }),
+                                  ),
+                                ] else
+                                  _EdgeToggle(
+                                    icon: Icons.chevron_right_rounded,
+                                    tooltip: '显示文件树 (Ctrl+B)',
+                                    onPressed: state.toggleSidebar,
+                                  ),
+                                Expanded(child: EditorPane(state: state)),
+                                if (state.showPreview) ...<Widget>[
+                                  _Splitter(
+                                    onDrag: (delta) => setState(() {
+                                      _previewWidth = (_previewWidth - delta).clamp(240.0, 900.0);
+                                    }),
+                                  ),
+                                  SizedBox(
+                                    width: _previewWidth,
+                                    child: _PreviewPane(state: state),
+                                  ),
+                                ],
+                                if (state.showFrontmatter) FrontmatterPanel(state: state),
+                              ],
+                            );
+                          },
                         ),
                 ),
                 Container(height: 1, color: scheme.outlineVariant),
@@ -200,16 +226,126 @@ class _ToggleFrontmatterIntent extends Intent {
   const _ToggleFrontmatterIntent();
 }
 
+/// 窄屏内容区：整屏显示编辑器或预览，底部一条切换器。
+///
+/// 竖屏手机上并排三栏每栏只剩两三百像素，排版没用；所以窄屏下预览不再并排，
+/// 而是整屏切换。文件树另走抽屉（见 [Scaffold.drawer]）。
+class _MobileContent extends StatelessWidget {
+  const _MobileContent({required this.state, required this.previewing});
+
+  final WorkspaceState state;
+  final bool previewing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: previewing ? _PreviewPane(state: state) : EditorPane(state: state),
+        ),
+        // frontmatter 面板在窄屏上也是整屏覆盖，避免和编辑区挤在一起
+        if (state.showFrontmatter)
+          SizedBox(height: 260, child: FrontmatterPanel(state: state)),
+        Container(height: 1, color: scheme.outlineVariant),
+        _EditorPreviewSwitch(state: state, previewing: previewing),
+      ],
+    );
+  }
+}
+
+/// 编辑 / 预览二选一。放在底部靠近拇指，比顶栏图标好按。
+class _EditorPreviewSwitch extends StatelessWidget {
+  const _EditorPreviewSwitch({required this.state, required this.previewing});
+
+  final WorkspaceState state;
+  final bool previewing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      height: 44,
+      color: scheme.surfaceContainer,
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: _Segment(
+              label: '源码',
+              icon: Icons.edit_note_rounded,
+              selected: !previewing,
+              onTap: previewing ? state.togglePreview : null,
+            ),
+          ),
+          Expanded(
+            child: _Segment(
+              label: '预览',
+              icon: Icons.article_outlined,
+              selected: previewing,
+              onTap: previewing ? null : state.togglePreview,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: selected ? scheme.primary : Colors.transparent, width: 2)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(icon, size: 17, color: selected ? scheme.primary : scheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.state,
     required this.searchOpen,
     required this.onToggleSearch,
+    required this.onOpenDrawer,
   });
 
   final WorkspaceState state;
   final bool searchOpen;
   final VoidCallback onToggleSearch;
+  final VoidCallback onOpenDrawer;
 
   @override
   Widget build(BuildContext context) {
@@ -227,8 +363,11 @@ class _TopBar extends StatelessWidget {
       child: Row(
         children: <Widget>[
           IconButton(
-            tooltip: '文件树 (Ctrl+B)',
-            onPressed: state.hasLibrary ? state.toggleSidebar : null,
+            tooltip: narrow ? '文件树' : '文件树 (Ctrl+B)',
+            // 窄屏用抽屉（Scaffold.drawer），宽屏切分栏
+            onPressed: state.hasLibrary
+                ? (narrow ? onOpenDrawer : state.toggleSidebar)
+                : null,
             icon: const Icon(Icons.menu_rounded, size: 19),
             visualDensity: VisualDensity.compact,
           ),
@@ -258,22 +397,21 @@ class _TopBar extends StatelessWidget {
             _SortDropdown(state: state),
           ],
           const Spacer(),
-          if (!narrow)
-            _ActionButton(
-              icon: Icons.search,
-              tooltip: '搜索 (Ctrl+F)',
-              active: searchOpen,
-              onPressed: onToggleSearch,
-            ),
+          _ActionButton(
+            icon: Icons.search,
+            tooltip: narrow ? '搜索' : '搜索 (Ctrl+F)',
+            active: searchOpen,
+            onPressed: onToggleSearch,
+          ),
           _ActionButton(
             icon: Icons.sell_outlined,
-            tooltip: 'Frontmatter 面板 (Ctrl+E)',
+            tooltip: narrow ? 'Frontmatter 面板' : 'Frontmatter 面板 (Ctrl+E)',
             active: state.showFrontmatter,
             onPressed: state.hasLibrary ? state.toggleFrontmatterPanel : null,
           ),
           _ActionButton(
             icon: Icons.vertical_split_rounded,
-            tooltip: '预览 (Ctrl+P)',
+            tooltip: narrow ? '编辑 / 预览切换' : '预览 (Ctrl+P)',
             active: state.showPreview,
             onPressed: state.hasLibrary ? state.togglePreview : null,
           ),
@@ -284,7 +422,7 @@ class _TopBar extends StatelessWidget {
           ),
           _ActionButton(
             icon: Icons.save_outlined,
-            tooltip: '保存 (Ctrl+S)',
+            tooltip: narrow ? '保存' : '保存 (Ctrl+S)',
             onPressed: state.activeDocument?.isDirty ?? false ? state.saveActive : null,
           ),
         ],

@@ -1,8 +1,53 @@
 # 鸿蒙（HarmonyOS NEXT / OpenHarmony）适配进展
 
-> **状态：HAP 已成功产出（108.69 MB），唯一未完成的是签名 —— 那一步需要你的华为开发者账号。**
+> **状态：已在鸿蒙模拟器上真实跑起来**（HarmonyOS 6.1.1 / API 24 / ohos-x64）。
+> 构建、安装、启动、渲染全部验证通过。装真机还差签名，那一步需要你的华为开发者账号。
 > 实测证据与复现步骤见 `docs/harmonyos-build-log.md`。
-> 最后更新：2026-09-12 夜
+> 最后更新：2026-09-13
+
+---
+
+## 零、最重要的一个发现：鸿蒙端没有任何插件
+
+`flutter build hap` 生成的 `GeneratedPluginRegistrant.ets` 是**空**的：
+
+```typescript
+static registerWith(flutterEngine: FlutterEngine) {
+  try {
+  } catch (e) { ... }
+}
+```
+
+原因是 `file_picker` 的 pubspec 里**没有 `ohos:` 平台声明**（只有 android / ios /
+macos / windows / linux / web）。也就是说，**依赖的原生能力在鸿蒙上全部不可用**：
+
+| 能力 | 依赖 | 鸿蒙状态 |
+|---|---|---|
+| 选择文件夹作为库 | `file_picker` | ❌ 未注册（已用自建通道补上，见下） |
+| 记住上次打开的库 | `shared_preferences` | ❌ 未注册 |
+| 打开外部链接 | `url_launcher` | ❌ 未注册 |
+
+这条比"SDK 版本不匹配"重要得多 —— **它是"能不能真正用起来"的分界线**。
+好消息是官方有 `@ohos/flutter_ohos` 的插件生态（OpenHarmony SIG 的 `flutter_packages`），
+后续可以接入对应的鸿蒙版插件，而不是像现在这样逐个手写。
+
+### 已补上的：鸿蒙原生目录选择器
+
+`file_picker` 在鸿蒙上不会报错也不会打开任何界面（静默失败），所以自建了一条通道：
+
+* ArkTS 侧：`ohos/entry/src/main/ets/entryability/EntryAbility.ets`
+  用 `@kit.CoreFileKit` 的 `picker.DocumentViewPicker` 打开系统文件选择器，
+  把选中的笔记**复制进应用沙箱**（`filesDir/yan-library`），再返回该目录路径。
+  这样做的好处是完全走 `dart:io`，不需要持久化 uri 授权。
+* Dart 侧：`lib/src/ui/platform_file_picker.dart`
+  检测 `Platform.operatingSystem == 'ohos'` 时走 `dev.yan/dir_picker` 通道。
+
+**实测**：通道注册成功（日志 `YanDirPicker --> channel registered`），
+点击按钮后系统文件选择器**真的弹出**（日志 `FileMgr uiPickerMain onAppear`）。
+
+**未完成**：没有在模拟器上走完"选文件 → 完成 → 导入进沙箱 → 列表出现"的整条链路 ——
+系统文件选择器是独立窗口，`uitest` 的合成点击打不进去，
+那一屏需要真人手点一下才能验完。
 
 ---
 

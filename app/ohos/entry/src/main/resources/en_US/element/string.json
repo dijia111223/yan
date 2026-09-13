@@ -1,16 +1,16 @@
 {
-  "string": [
-    {
-      "name": "module_desc",
-      "value": "module description"
-    },
-    {
-      "name": "EntryAbility_desc",
-      "value": "description"
-    },
-    {
-      "name": "EntryAbility_label",
-      "value": "yan_note"
-    }
-  ]
+    "string":  [
+                   {
+                       "name":  "module_desc",
+                       "value":  "Plain-file, local-first Markdown editor"
+                   },
+                   {
+                       "name":  "EntryAbility_desc",
+                       "value":  "description"
+                   },
+                   {
+                       "name":  "EntryAbility_label",
+                       "value":  "Yan"
+                   }
+               ]
 }

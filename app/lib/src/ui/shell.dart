@@ -10,7 +10,7 @@ import 'editor_pane.dart';
 import 'file_tree.dart';
 import 'frontmatter_panel.dart';
 import 'markdown_preview.dart';
-import 'platform_file_picker.dart';
+import '../core/platform_file_picker.dart';
 import 'search_panel.dart';
 import 'status_bar.dart';
 import 'welcome_view.dart';
@@ -425,6 +425,13 @@ class _TopBar extends StatelessWidget {
             tooltip: narrow ? '保存' : '保存 (Ctrl+S)',
             onPressed: state.activeDocument?.isDirty ?? false ? state.saveActive : null,
           ),
+          // 宽屏也给一个导出入口，不必绕进"更多"菜单
+          if (!narrow)
+            _ActionButton(
+              icon: Icons.ios_share_rounded,
+              tooltip: '导出到…',
+              onPressed: state.activeDocument == null ? null : state.exportActiveNote,
+            ),
         ],
       ),
     );
@@ -562,6 +569,8 @@ class _OverflowMenu extends StatelessWidget {
             onSearch();
           case 'save':
             await state.saveActive();
+          case 'export':
+            await state.exportActiveNote();
           case 'closeTab':
             await state.closeDocument(state.activeIndex);
           case 'sortName':
@@ -577,6 +586,7 @@ class _OverflowMenu extends StatelessWidget {
         const PopupMenuDivider(),
         const PopupMenuItem<String>(value: 'search', child: Text('搜索')),
         const PopupMenuItem<String>(value: 'save', child: Text('保存')),
+        const PopupMenuItem<String>(value: 'export', child: Text('导出到…')),
         const PopupMenuItem<String>(value: 'closeTab', child: Text('关闭当前标签')),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(value: 'sortName', child: Text('按名称排序')),

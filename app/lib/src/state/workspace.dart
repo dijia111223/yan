@@ -13,6 +13,7 @@ import '../core/library.dart';
 import '../core/markdown_theme.dart';
 import '../core/math_text.dart';
 import '../core/models.dart';
+import '../core/platform_file_picker.dart';
 import '../core/search.dart';
 import 'editor_controller.dart';
 
@@ -213,6 +214,17 @@ class WorkspaceState extends ChangeNotifier {
         }
       }
     }
+
+    // 鸿蒙兜底：命令行走不通（EntryAbility 不转发 want 参数），用户只能靠界面上那个
+    // 目录选择器；没导入过笔记时就卡在欢迎页，连新建都点不了。
+    // 这里把沙箱库目录建好并直接打开，保证一进来就有可写、可新建的库。
+    if (!hasLibrary && Platform.operatingSystem == 'ohos') {
+      final sandbox = await ensureOhosLibraryDir();
+      if (sandbox != null && Directory(sandbox).existsSync()) {
+        await openFolder(sandbox, remember: false);
+      }
+    }
+
     notifyListeners();
   }
 
@@ -537,6 +549,26 @@ class WorkspaceState extends ChangeNotifier {
       if (doc.isDirty) {
         await saveDocument(doc);
       }
+    }
+  }
+
+  /// 把当前笔记导出到用户选定的位置。
+  ///
+  /// 鸿蒙的目录选择器只能选文件不能选目录，所以库是"导入到沙箱再编辑"，
+  /// 需要这条路把改动送出去。桌面端返回未实现，走文件系统直接复制即可。
+  Future<void> exportActiveNote() async {
+    final doc = activeDocument;
+    if (doc == null) {
+      showToast('没有打开的笔记');
+      return;
+    }
+    // 先把沙箱里的内容落盘，导出的才是最新的
+    if (doc.isDirty) await saveDocument(doc);
+    try {
+      final saved = await exportNoteFile(doc.name, doc.path);
+      if (saved != null) showToast('已导出：$saved');
+    } on DirectoryPickException catch (e) {
+      showToast(e.message);
     }
   }
 

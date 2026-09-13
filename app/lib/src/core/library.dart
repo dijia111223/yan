@@ -8,13 +8,11 @@ import 'models.dart';
 class Library {
   Library(this.rootPath);
 
-  /// 库根目录的绝对路径。
   final String rootPath;
 
-  /// 库名（取文件夹名）。
   String get name => p.basename(rootPath);
 
-  /// 扫描时需要跳过的目录名（版本控制、构建产物、其它笔记软件的私有目录）。
+  /// 扫描时要跳过的目录名。
   static const Set<String> skippedDirectoryNames = <String>{
     '.git',
     '.svn',
@@ -30,12 +28,11 @@ class Library {
     '.hvigor',
     '.idea',
     '.vscode',
-    // 妙言（MiaoYan）把附件放在这里，避免把二进制资源当笔记列出来
+    // 妙言的附件目录，避免把二进制资源当笔记列出来
     'attachments',
     '.yan',
   };
 
-  /// 是否跳过这个目录项。
   static bool shouldSkip(String name) {
     if (name.startsWith('.')) return true;
     return skippedDirectoryNames.contains(name);
@@ -45,10 +42,7 @@ class Library {
 
   bool get exists => directory.existsSync();
 
-  /// 列出 [directoryPath] 下的一层子项（不递归），供文件树懒加载。
-  ///
-  /// 目录排在文件前面；同一组内按 [sort] 排序。读盘失败返回空列表——
-  /// 单个目录权限问题不应让整个文件树崩掉。
+  /// 列出 [directoryPath] 下的一层子项（不递归）；读盘失败返回空列表。
   Future<List<LibraryEntry>> listChildren(
     String directoryPath, {
     LibrarySort sort = LibrarySort.nameAsc,
@@ -86,11 +80,7 @@ class Library {
     return entries;
   }
 
-  /// 同步列出一层子项。
-  ///
-  /// 文件树用它而不是异步版：目录树是**一次一层**的懒加载，单层 `listSync` 开销
-  /// 可忽略，换来的是渲染路径上没有任何异步等待——树不会闪，也不会出现"加载中"
-  /// 中间态。真正的递归扫描（全文搜索）仍然走异步。
+  /// 同步列出一层子项；文件树用它，渲染路径上不能有异步等待。
   List<LibraryEntry> listChildrenSync(
     String directoryPath, {
     LibrarySort sort = LibrarySort.nameAsc,
@@ -156,9 +146,6 @@ class Library {
     return ta.compareTo(tb);
   }
 
-  /// 递归收集库内所有 Markdown 文件路径（用于全文搜索）。
-  ///
-  /// 只返回 [LibraryEntry.isMarkdown] 为真的文件。
   Future<List<LibraryEntry>> collectMarkdownFiles({
     int maxFiles = 20000,
   }) async {
@@ -191,7 +178,6 @@ class Library {
     return results;
   }
 
-  /// 在库内新建一个不重名的 Markdown 文件，返回其路径。
   Future<String> createNote({String baseName = '未命名笔记', String? parentPath}) async {
     final targetDir = Directory(parentPath ?? rootPath);
     if (!await targetDir.exists()) {
@@ -207,7 +193,6 @@ class Library {
     return candidate;
   }
 
-  /// 在库内新建子文件夹，返回其路径。
   Future<String> createFolder({String baseName = '新建文件夹', String? parentPath}) async {
     final targetDir = Directory(parentPath ?? rootPath);
     var candidate = p.join(targetDir.path, baseName);
@@ -220,7 +205,7 @@ class Library {
     return candidate;
   }
 
-  /// 重命名（同目录内）。返回新路径；目标已存在时抛出 [FileSystemException]。
+  /// 重命名（同目录内）；目标已存在时抛 [FileSystemException]。
   Future<String> rename(String path, String newName) async {
     final parent = p.dirname(path);
     final target = p.join(parent, newName);
@@ -235,7 +220,7 @@ class Library {
     return (await File(path).rename(target)).path;
   }
 
-  /// 删除文件（送到系统回收站之外——直接删除，UI 层必须二次确认）。
+  /// 删除文件。不经回收站，UI 层必须二次确认。
   Future<void> delete(String path) async {
     final type = await FileSystemEntity.type(path);
     if (type == FileSystemEntityType.directory) {
@@ -245,13 +230,13 @@ class Library {
     }
   }
 
-  /// 把库内的绝对路径转成相对路径（用于展示与搜索结果）。
+  /// 把库内的绝对路径转成相对路径，分隔符统一成 `/`。
   String relative(String absolutePath) {
     final rel = p.relative(absolutePath, from: rootPath);
     return rel.replaceAll(r'\', '/');
   }
 
-  /// 目录项的直接子项数量（文件树展开前的粗略计数，读盘失败返回 null）。
+  /// 目录项的直接子项数量；读盘失败返回 null。
   static Future<int?> childCount(String directoryPath) async {
     try {
       var count = 0;

@@ -1,9 +1,5 @@
-﻿# Capture real screenshots of the running Yan (砚) Windows app.
-#
-# Keeps README images honest: every screenshot comes from the actual release
-# binary, not from a mock-up.
-#
-# Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File capture_shots.ps1
+# Capture screenshots from the running Windows app.
+# Images come from the release binary, not mock-ups.
 
 [CmdletBinding()]
 param(
@@ -69,12 +65,10 @@ function Stop-App {
     Start-Sleep -Milliseconds 700
 }
 
-# 库与"要打开的笔记"走命令行参数（--library / --open）：既是真实用户的启动方式，
-# 也避免依赖会话恢复逻辑。只有"视图偏好"（深浅色/分栏开关）走偏好文件。
-#
-# 注意：Start-Process -ArgumentList 收到数组时**不会**给含空格的元素自动加引号，
+# 库与要打开的笔记走命令行参数；视图偏好走偏好文件。
+# Start-Process -ArgumentList 不会给含空格的元素加引号，
 # 于是 `--open C:\x\CUDA 编程 · 线程层次.md` 会被拆成两个参数传给进程。
-# 必须自己引号包裹（见 Quote-Arg）。
+# 必须自己引号包裹。
 function Quote-Arg([string]$value) {
     if ($value -match '[\s"]') { return '"' + ($value -replace '"', '\"') + '"' }
     return $value
@@ -94,7 +88,7 @@ function Capture([string]$outFile, [string]$noteToOpen, [string]$label,
     if ($proc.HasExited) { throw "app exited early for '$label'" }
     $h = $proc.MainWindowHandle
 
-    # 先最小化其它窗口，避免遮挡；再最大化并置前
+    # 最小化其它窗口避免遮挡，再最大化置前
     Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Id -ne $proc.Id } | ForEach-Object {
         [Win]::ShowWindow($_.MainWindowHandle, 6) | Out-Null   # 6 = minimize
     }
@@ -110,7 +104,6 @@ function Capture([string]$outFile, [string]$noteToOpen, [string]$label,
     if ($w -le 0 -or $ht -le 0) { throw "bad window rect for '$label': ${w}x${ht}" }
 
     # 用 CopyFromScreen 抓屏幕区域，**不要用 PrintWindow**。
-    #
     # 实测 PrintWindow + PW_RENDERFULLCONTENT 对 Flutter 窗口会返回同一帧陈旧位图
     # （换了进程、换了内容，抓出来的哈希完全一样），据此生成的 README 截图会骗人。
     # 抓屏幕要求窗口在前台且未被遮挡——所以上面先最小化其它窗口。

@@ -23,24 +23,19 @@ class SearchHit {
 
   final String path;
 
-  /// 相对库根的路径，例如 `考研/数学/高数.md`。
   final String relativePath;
 
   final String name;
 
-  /// 是否命中了文件名（文件名命中优先展示）。
   final bool isFileNameMatch;
 
-  /// 匹配得分，越大越靠前。
   final int score;
 
-  /// 命中的行号（1 基）。文件名命中时为 null。
+  /// 命中的行号（1 基）；文件名命中时为 null。
   final int? line;
 
-  /// 命中的列号（1 基）。
   final int? column;
 
-  /// 命中行附近的片段（前后各留若干字符）。
   final String? snippet;
 
   /// [snippet] 中匹配串的起止下标，用于高亮。
@@ -50,7 +45,6 @@ class SearchHit {
   String get location => line == null ? '' : '第 $line 行';
 }
 
-/// 搜索范围。
 enum SearchScope {
   both('文件名 + 内容'),
   fileName('仅文件名'),
@@ -61,11 +55,7 @@ enum SearchScope {
   final String label;
 }
 
-/// 全文搜索引擎。
-///
-/// 宪章 v1 的"全文搜索（文件名+内容）"就是这一块：
-/// 纯文件、无索引文件、无数据库——直接遍历磁盘。
-/// 库规模在数万文件以内时足够快（读文件上限 + 命中数上限双重保护）。
+/// 全文搜索引擎：直接遍历磁盘，没有索引文件、没有数据库。
 class SearchEngine {
   const SearchEngine(this.library);
 
@@ -74,15 +64,12 @@ class SearchEngine {
   /// 单次搜索最多返回的命中数。
   static const int maxHits = 300;
 
-  /// 单次搜索最多读取的文件数。
   static const int maxFilesScanned = 8000;
 
   /// 单个文件最多返回的命中行数（避免一个长文件刷屏）。
   static const int maxHitsPerFile = 20;
 
-  /// 执行搜索。
-  ///
-  /// [query] 大小写不敏感。返回按得分排序的命中列表。
+  /// [query] 大小写不敏感；返回按得分排序的命中。
   Future<List<SearchHit>> search(
     String query, {
     SearchScope scope = SearchScope.both,
@@ -92,7 +79,7 @@ class SearchEngine {
     if (needle.isEmpty) return const <SearchHit>[];
 
     final files = await library.collectMarkdownFiles();
-    // 文件名命中优先，同时稳定排序保证结果可复现
+    // 先按路径排序，保证同名得分的结果顺序可复现
     files.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
 
     final hits = <SearchHit>[];
@@ -165,12 +152,12 @@ class SearchEngine {
     } on FileSystemException {
       return const <SearchHit>[];
     } on FormatException {
-      // 非 UTF-8 文件跳过（v1 不做编码嗅探）
+      // 非 UTF-8 文件跳过，v1 不做编码嗅探
       return const <SearchHit>[];
     }
 
     final lines = content.split('\n');
-    // 判断 frontmatter 占据的行区间，用于按开关跳过
+    // 正文起始行 = frontmatter 原始行数 + 两行分隔符
     var bodyStartLine = 0;
     if (!searchFrontmatter) {
       final parsed = FrontmatterCodec.parse(content);
@@ -188,14 +175,12 @@ class SearchEngine {
       final index = lineText.toLowerCase().indexOf(needle);
       if (index < 0) continue;
 
-      // 截取命中点前后的一段文本；两端截断时补省略号
       final windowStart = index - 40 < 0 ? 0 : index - 40;
       final windowEnd = index + needle.length + 60 > lineText.length
           ? lineText.length
           : index + needle.length + 60;
       final prefix = windowStart > 0 ? '…' : '';
       final suffix = windowEnd < lineText.length ? '…' : '';
-      // 只去掉左侧空白，并同步修正匹配串在片段中的下标
       final raw = lineText.substring(windowStart, windowEnd);
       final trimmed = raw.trimLeft();
       final dropped = raw.length - trimmed.length;

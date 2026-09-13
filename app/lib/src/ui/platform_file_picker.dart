@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
-/// 目录选择失败的原因。
 class DirectoryPickException implements Exception {
   const DirectoryPickException(this.message);
 
@@ -15,11 +14,8 @@ class DirectoryPickException implements Exception {
 
 /// 选择一个目录作为库。
 ///
-/// 桌面端：原生目录对话框，返回可直接读写的绝对路径。
-/// Android：`file_picker` 走 SAF，返回的是 `content://` URI（或某些机型给出
-/// `/tree/...` 形式的伪路径），无法直接用 `dart:io` 读写。v1 明确不做"伪文件系统"
-/// 抽象，因此这里抛出 [DirectoryPickException] 并提示替代方案——宁可功能诚实缺失，
-/// 也不做半截支持。
+/// Android 上 file_picker 走 SAF，拿到的是 `content://` URI（或 `/tree/...` 伪路径），
+/// `dart:io` 读写不了；v1 不做伪文件系统抽象，直接抛 [DirectoryPickException]。
 Future<String?> pickDirectoryPath() async {
   try {
     final selected = await FilePicker.getDirectoryPath(

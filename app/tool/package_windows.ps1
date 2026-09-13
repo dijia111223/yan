@@ -1,11 +1,8 @@
-﻿# Package the Windows release into a self-contained zip.
+# Package the Windows release into a self-contained zip.
 #
-# Why bundle the MSVC runtime: yan_note.exe links against VCRUNTIME140.dll /
-# MSVCP140.dll. Without them a fresh machine shows a "missing DLL" dialog, which
-# is a terrible first impression for a portable app. The Microsoft C runtime is
-# redistributable, so we ship the DLLs next to the exe (app-local deployment).
-#
-# Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File package_windows.ps1
+# yan_note.exe links VCRUNTIME140.dll / MSVCP140.dll, so a machine without the
+# VC++ redistributable would fail to start. The MSVC runtime is redistributable,
+# so ship it app-local.
 
 [CmdletBinding()]
 param(

@@ -1,31 +1,14 @@
-﻿# 修复 flutter-hvigor-plugin 对缺失 `ohos` 键的崩溃（DevEco 同步 / hvigor 构建都会踩到）。
+# 让 flutter-hvigor-plugin 容忍缺失的 `ohos` 键。
 #
-# 根因（已实测确认）
-# ------------------
-# `ohos/node_modules/flutter-hvigor-plugin` 里的 `findFlutterPlugins()` 长这样：
+# 官方 Flutter 的 pub get 会重写 .flutter-plugins-dependencies，且不含 ohos 平台，
+# 于是 plugins.ohos 变成 undefined，插件里的 ohosPlugins.filter(...) 抛
+# TypeError，hvigor 同步失败（Error Code: 00308018）。
 #
-#     const ohosPlugins = JSON.parse(fileContent).plugins.ohos
-#     const filteredPlugins = ohosPlugins.filter(plugin => plugin.native_build !== false)
+# 改的是 pub 缓存外的 node_modules，所以重新 ohpm install 后要重跑本脚本
+# （build_ohos.ps1 会自动调用）。
 #
-# 而 **官方 Flutter 的 `pub get` 会重写 `.flutter-plugins-dependencies` 并抹掉 `ohos` 键**
-# （实测：跑完官方 pub get 后顶层键只剩 ios/android/macos/linux/windows/web）。
-# 此时 `.plugins.ohos` 是 undefined，`.filter` 抛：
+# 逐行替换而非 -replace：避免 PowerShell 把引号后的 $1x 当变量名。
 #
-#     TypeError: Cannot read properties of undefined (reading 'filter')
-#     > hvigor ERROR: Error Code: 00308018 Unknown Error
-#
-# 也就是说：**只要用桌面版 Flutter 跑过一次 `pub get`，鸿蒙工程的 hvigor 同步/构建就会崩**。
-# 这是两条工具链共用同一个工程目录必然产生的冲突。
-#
-# 两层修复
-# --------
-# 1) 本脚本：把插件改成容错，缺键时按"没有 ohos 插件"处理，而不是整个崩掉。
-# 2) `build_ohos.ps1`：构建前一定用 OHOS fork 重新生成该文件，保证 ohos 键存在。
-#
-# 实现说明：这里用**逐行替换**（不用多行 here-string，也不用带反斜杠引用的 -replace），
-# 避免踩"PowerShell 把引号后的 $1x 解析成未定义变量"以及"插入内容被并入上一行"两个坑。
-#
-# 用法：
 #     powershell -NoProfile -ExecutionPolicy Bypass -File tool/patch_hvigor_plugin.ps1
 
 [CmdletBinding()]

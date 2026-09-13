@@ -1,37 +1,20 @@
-# Prepare Flutter plugin links on Windows WITHOUT Developer Mode.
+# Prepare Flutter plugin links on Windows without Developer Mode.
 #
-# Why this exists
-# ---------------
-# When building an app that has plugins, Flutter links each plugin directory from
-# the pub cache into:
+# Flutter links plugins from the pub cache into
+# windows/flutter/ephemeral/.plugin_symlinks/ with symbolic links, which need
+# Administrator rights or Developer Mode. Junctions need neither, and Flutter only
+# checks that the directory exists.
 #
-#     windows/flutter/ephemeral/.plugin_symlinks/
+# Re-run after: first clone, `flutter clean`, adding/removing dependencies.
 #
-# It uses *symbolic links* by default, and creating symbolic links on Windows
-# requires Administrator rights or Developer Mode. A *directory junction* needs
-# neither. Flutter only checks whether that directory exists; it does not verify
-# that the entries are symlinks, so pre-creating junctions lets the build proceed.
-#
-# When to re-run
-# --------------
-# - after the first clone
-# - after `flutter clean` (it deletes the ephemeral directory)
-# - after adding/removing dependencies (the plugin set changes)
-#
-# Usage
-# -----
 #     pwsh -File tool/prepare_windows_plugins.ps1
 #
-# If Developer Mode is already enabled, you do not need this script at all.
-#
-# NOTE: this file is intentionally ASCII-only. Windows PowerShell 5.1 reads .ps1
-# files using the ANSI code page, so non-ASCII comments get mangled and can even
-# break parsing.
+# ASCII-only on purpose: Windows PowerShell 5.1 reads .ps1 as ANSI, so non-ASCII
+# comments get mangled and can break parsing.
 
 [CmdletBinding()]
 param(
-    # NOTE: $PSScriptRoot can be empty when this file is invoked via `-File` from
-    # cmd.exe, so fall back to the invocation path.
+    # $PSScriptRoot is empty when invoked via `-File` from cmd.exe.
     [string]$ProjectRoot,
     [string]$PubCache = $(if ($env:PUB_CACHE) { $env:PUB_CACHE } else { Join-Path $env:LOCALAPPDATA 'Pub\Cache' })
 )

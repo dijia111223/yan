@@ -24,10 +24,7 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   double _sidebarWidth = 248;
 
-  /// 预览栏默认宽度。
-  ///
-  /// 440 太窄：表格、行间公式、代码块在预览里会被挤到需要横向滚动，
-  /// 三栏布局的价值就没了。620 在常见窗口宽度下能让正文有舒适的行长。
+  /// 预览栏默认宽度：再窄表格 / 公式 / 代码块就要横向滚动。
   double _previewWidth = 620;
   bool _searchOpen = false;
 
@@ -166,8 +163,6 @@ class _ShellState extends State<Shell> {
   }
 }
 
-// ------------------------------------------------------------------ Intents
-
 class _SaveIntent extends Intent {
   const _SaveIntent();
 }
@@ -199,8 +194,6 @@ class _TogglePreviewIntent extends Intent {
 class _ToggleFrontmatterIntent extends Intent {
   const _ToggleFrontmatterIntent();
 }
-
-// ------------------------------------------------------------------ 顶栏
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
@@ -481,9 +474,6 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------------ 分栏
-
-/// 可拖动的分栏把手。
 class _Splitter extends StatelessWidget {
   const _Splitter({required this.onDrag});
 
@@ -508,7 +498,6 @@ class _Splitter extends StatelessWidget {
   }
 }
 
-/// 侧栏收起后留在边缘的展开按钮。
 class _EdgeToggle extends StatelessWidget {
   const _EdgeToggle({required this.icon, required this.tooltip, required this.onPressed});
 
@@ -530,7 +519,6 @@ class _EdgeToggle extends StatelessWidget {
   }
 }
 
-/// 预览栏：实时 / 手动两种模式。
 class _PreviewPane extends StatelessWidget {
   const _PreviewPane({required this.state});
 
@@ -605,7 +593,6 @@ class _PreviewPane extends StatelessWidget {
   }
 }
 
-/// 选择库文件夹（桌面走原生目录对话框，Android 走 SAF）。
 Future<void> pickLibraryFolder(WorkspaceState state) async {
   try {
     final selected = await pickDirectoryPath();

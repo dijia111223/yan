@@ -76,7 +76,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\build_ohos.p
 
 ---
 
-## 途中解决的 5 个真实问题
+## 途中解决的 6 个真实问题
 
 ### 0. DevEco 同步报 `Error Code: 00308018`（最常见的一个）
 
@@ -199,6 +199,30 @@ selectable.dart:276: Error: The type 'TargetPlatform' is not exhaustively matche
    **`Automatically generate signature`**（需要登录华为账号）
 3. 等待自动生成证书与 profile
 4. 回到命令行重新跑 `tool\build_ohos.ps1`，这次应产出 `entry-default-signed.hap`
+
+### 5. SDK 版本不匹配（`compatibleSdkVersion` / `targetSdkVersion`）
+
+**症状**：
+
+```
+compileSdkVersion、compatibleSdkVersion 或 targetSdkVersion（若显式配置）的值不正确，
+请按照指南中的说明修改该值。
+```
+
+**根因**：`flutter create` 的模板把 `compatibleSdkVersion` 写死为 `5.0.0(12)`，
+`targetSdkVersion` 是**空字符串**（schema 不接受空串），而本机只有 HarmonyOS 6.1.1 (API 24)。
+
+证据在产物里：修之前 HAP 的 `module.json` 记录
+`minAPIVersion: 50000012`（= 5.0.0(12)，本机不存在）、`targetAPIVersion: 60101024`。
+
+**修复**：`tool/sync_ohos_sdk_version.ps1` 读 `<DevEco>/sdk/default/sdk-pkg.json` 的
+`platformVersion` + `apiVersion`，拼成 `6.1.1(24)` 写进两个字段；
+`build_ohos.ps1` 每次构建前调用它。
+
+**验证**：修后 `minAPIVersion` = `60101024`，与 `targetAPIVersion` 一致。
+
+**附带结论**：`compileSdkVersion` 不需要配 —— hvigor 里是
+`compileSdkVersion: t.compileSdkVersion ?? SUPPORT_COMPILE_VERSION`，缺省用 SDK 默认值。
 
 ---
 

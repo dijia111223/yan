@@ -249,13 +249,51 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor
 |---|---|---|
 | 模拟器 | 鸿蒙模拟器**仅支持 Mac(arm64)**，Windows 上没有 | 只能真机验证 |
 | 签名 | `build-profile.json5` 的 `signingConfigs` 为**空数组** —— 未配置签名时 HAP 可以构建但**装不上真机** | 待你提供签名（DevEco 里自动生成） |
-| `compatibleSdkVersion` | 模板生成的是 `5.0.0(12)`，而本机 SDK 是 API 24 | 构建成功则无需改；若报错需调整 |
+| SDK 版本 | 模板写死 `5.0.0(12)`、`targetSdkVersion` 为空串，与本机 API 24 不匹配 | **已修**，见第六节；`tool/sync_ohos_sdk_version.ps1` 自动对齐 |
 | 无真机 | 本机没有鸿蒙设备，**无法验证运行**，只能验证"构建通过" | 需要在你的真机上验证 |
 | Dart 版本差 | 鸿蒙 Dart 3.6 vs 桌面 Dart 3.13，代码需长期保持"3.6 兼容" | 需要 CI 或约定来守 |
 
 ---
 
-## 八、诚实结论：做到哪一步了
+## 八、SDK 版本报错的修法
+
+**症状**：
+
+```
+compileSdkVersion、compatibleSdkVersion 或 targetSdkVersion（若显式配置）的值不正确，
+请按照指南中的说明修改该值。
+```
+
+**根因**：`flutter create` 的鸿蒙模板把 `compatibleSdkVersion` 写死成 `5.0.0(12)`，
+且 `targetSdkVersion` 是**空字符串**（schema 不接受空串）。若本机只装了别的版本
+（例如 HarmonyOS 6.1.1 / API 24），两者就对不上。
+
+证据：修之前 HAP 里记录的 `minAPIVersion` 是 `50000012`（= 5.0.0(12)），
+而 `targetAPIVersion` 是 `60101024` —— 声明的最低版本 12 在本机根本不存在。
+
+**修法**（已自动化，`tool/sync_ohos_sdk_version.ps1`）：
+
+1. 从 `<DevEco>/sdk/default/sdk-pkg.json` 读 `platformVersion` 与 `apiVersion`
+2. 拼成 `主.次.修订(API)`，例如 `6.1.1(24)`
+3. 写进 `build-profile.json5` 的 `compatibleSdkVersion` 与 `targetSdkVersion`
+
+`build_ohos.ps1` 每次构建前会调用它，所以换机器不用手动改。
+
+**格式由 hvigor 的 schema 校验**：
+
+```
+^((?:[5-9]|[1-9]\d+)\.\d+\.\d+\(\d+\)|4\.(?:[1-9]\d*\.\d+\(\d+\)|0\.(?:[1-9]\d*\(\d+\)|0\((?:1[1-9]|[2-9]\d+)\))))$
+```
+
+**`compileSdkVersion` 不用配**：hvigor 里是
+`compileSdkVersion: t.compileSdkVersion ?? SUPPORT_COMPILE_VERSION`，缺省即用
+SDK 自带的默认值。
+
+修完的验证：HAP 里的 `minAPIVersion` 变为 `60101024`，与 `targetAPIVersion` 一致。
+
+---
+
+## 九、诚实结论：做到哪一步了
 
 **已经完成并实测通过的**：
 
@@ -283,7 +321,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor
 
 ---
 
-## 九、给上游的反馈建议
+## 十、给上游的反馈建议
 
 本次踩到的问题都值得提给上游，对后来的鸿蒙 Flutter 使用者有直接价值：
 
@@ -303,7 +341,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\yan\app\tool\patch_hvigor
 
 ---
 
-## 十、参考
+## 十一、参考
 
 - [Flutter 鸿蒙版环境配置（Windows）](https://cloud.tencent.com.cn/developer/article/2514736)
 - [适配 HarmonyOS Next API16 的鸿蒙版 Flutter 3.22.0 发布](https://cloud.tencent.cn/developer/article/2518615)

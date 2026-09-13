@@ -61,7 +61,11 @@ try {
 
     Push-Location $ProjectRoot
     try {
-        Write-Host "=== flutter pub get ===" -ForegroundColor Cyan
+        # 关键：必须用 **OHOS fork** 跑 pub get。
+        # 官方 Flutter 的 pub get 会重写 .flutter-plugins-dependencies 并抹掉 `ohos` 键，
+        # 导致 hvigor 插件里 `.plugins.ohos.filter(...)` 读 undefined 而崩（Error 00308018）。
+        # 这也是"先跑桌面 Flutter、再开 DevEco"时同步失败的根本原因。
+        Write-Host "=== flutter pub get（OHOS fork，保证 ohos 键存在）===" -ForegroundColor Cyan
         & "$OhosFlutter\bin\flutter.bat" pub get 2>&1 | Tee-Object -FilePath $log
 
         Write-Host "=== flutter build hap --$Mode --target-platform $TargetPlatform ===" -ForegroundColor Cyan
@@ -71,6 +75,14 @@ try {
         Write-Host "=== build hap 退出码: $code ===" -ForegroundColor $(if ($code -eq 0) { 'Green' } else { 'Red' })
     } finally {
         Pop-Location
+    }
+
+    # hvigor 在构建时会跑 `ohpm install`，可能把 node_modules 里的插件还原。
+    # 因此在构建后再补一次补丁，保证下次 DevEco 同步 / 直接调 hvigor 也不会崩。
+    $hvPatch = Join-Path $ProjectRoot 'tool\patch_hvigor_plugin.ps1'
+    if (Test-Path $hvPatch) {
+        Write-Host "=== 复核 hvigor 插件容错补丁 ===" -ForegroundColor Cyan
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $hvPatch -ProjectRoot $ProjectRoot
     }
 } finally {
     Copy-Item $backup $pubspec -Force

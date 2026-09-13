@@ -14,7 +14,10 @@ import { common } from '@kit.AbilityKit';
  *
  * 阶段 1（当前）：用系统文件选择器让用户选 .md 文件，复制进应用沙箱的一个子目录，
  * 再把该目录路径交给 Dart —— 这样完全走 dart:io，不需要持久化 uri 授权。
- * 阶段 2（未做）：让用户选目录并持久化 uri 授权，直接原地读写。
+ *
+ * 做不到"选一个文件夹原地读写"：DocumentViewPicker 只能选文件、不能选目录。
+ * 所以对外的话术应当是"导入副本 → 编辑 → 导出回去"，而不是"直接改你的文件"。
+ * 对应地提供了 exportFile，否则用户的改动永远出不了沙箱。
  */
 const TAG = 'YanDirPicker';
 const CHANNEL = 'dev.yan/dir_picker';

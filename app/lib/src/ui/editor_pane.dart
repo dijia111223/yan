@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../core/markdown_theme.dart';
+import '../state/ai_controller.dart';
+import '../state/ai_scope.dart';
+import '../state/ai_suggestion.dart';
 import '../state/workspace.dart';
+import 'ai_suggestion_bar.dart';
 import 'markdown_editor.dart';
 
-/// 编辑区：标签页 + 格式工具条 + 源码编辑器。
+/// 编辑区：标签页 + 格式工具条 + 源码编辑器 + 补全建议栏。
 class EditorPane extends StatelessWidget {
   const EditorPane({super.key, required this.state});
 
@@ -11,8 +16,6 @@ class EditorPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final doc = state.activeDocument;
     final md = state.markdownTheme;
 
@@ -25,23 +28,115 @@ class EditorPane extends StatelessWidget {
         Expanded(
           child: doc == null
               ? _EmptyEditor(state: state)
-              : MarkdownEditor(
-                  key: ValueKey<String>(doc.path),
-                  controller: doc.controller,
-                  textStyle: md.body.copyWith(fontSize: 15.5, height: 1.62),
-                  // 行号栏字号小一档，行高按比例缩放以与正文对齐
-                  gutterStyle: md.punctuation.copyWith(
-                    fontSize: 12,
-                    height: 1.62 * 15.5 / 12,
-                  ),
-                  backgroundColor: scheme.surface,
-                  gutterBackgroundColor: scheme.surfaceContainerLow,
-                  dividerColor: scheme.outlineVariant,
-                  selectionColor: scheme.primary,
-                ),
+              : _EditorWithSuggestions(state: state, doc: doc, md: md),
         ),
       ],
     );
+  }
+}
+
+/// 编辑器 + 补全建议栏。
+///
+/// 单独抽出来是为了让它成为一个 StatefulWidget 并持有 [AiSuggestionController]：
+/// 建议的生命周期跟着**具体某篇文档**走，切换标签时要清掉，
+/// 否则会把上一篇的建议插到这一篇里。
+class _EditorWithSuggestions extends StatefulWidget {
+  const _EditorWithSuggestions({
+    required this.state,
+    required this.doc,
+    required this.md,
+  });
+
+  final WorkspaceState state;
+  final OpenDocument doc;
+  final MarkdownTheme md;
+
+  @override
+  State<_EditorWithSuggestions> createState() => _EditorWithSuggestionsState();
+}
+
+class _EditorWithSuggestionsState extends State<_EditorWithSuggestions> {
+  AiSuggestionController? _suggestions;
+  AiController? _ai;
+  String _docPath = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ai = AiScope.maybeOf(context);
+    if (ai != _ai) {
+      _suggestions?.dispose();
+      _suggestions = ai == null ? null : AiSuggestionController(ai: ai);
+      _ai = ai;
+    }
+  }
+
+  @override
+  void dispose() {
+    _suggestions?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final doc = widget.doc;
+    final md = widget.md;
+    final suggestions = _suggestions;
+
+    // 切换文档：清掉上一篇留下的建议
+    if (_docPath != doc.path) {
+      _docPath = doc.path;
+      suggestions?.reset();
+    }
+
+    final editor = MarkdownEditor(
+      key: ValueKey<String>(doc.path),
+      controller: doc.controller,
+      textStyle: md.body.copyWith(fontSize: 15.5, height: 1.62),
+      // 行号栏字号小一档，行高按比例缩放以与正文对齐
+      gutterStyle: md.punctuation.copyWith(
+        fontSize: 12,
+        height: 1.62 * 15.5 / 12,
+      ),
+      backgroundColor: scheme.surface,
+      gutterBackgroundColor: scheme.surfaceContainerLow,
+      dividerColor: scheme.outlineVariant,
+      selectionColor: scheme.primary,
+      onChanged: suggestions == null
+          ? null
+          : (text, cursor) => suggestions.onTextChanged(text, cursor),
+    );
+
+    if (suggestions == null) return editor;
+
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: AiSuggestionShortcuts(
+            controller: suggestions,
+            onAccept: () => _accept(suggestions),
+            child: editor,
+          ),
+        ),
+        AiSuggestionBar(
+          controller: suggestions,
+          onAccept: (_) => _accept(suggestions),
+        ),
+      ],
+    );
+  }
+
+  void _accept(AiSuggestionController suggestions) {
+    final text = suggestions.accept((inserted) {
+      widget.state.insertAtCursor(inserted);
+    });
+    if (text.isEmpty) return;
+    // 采纳后光标已经移动，重新触发一次请求拿下一条。
+    // onTextChanged 自带防抖与作废，所以这里不必自己做延迟。
+    final c = widget.doc.controller;
+    final cursor = c.selection.baseOffset;
+    suggestions.onTextChanged(c.text, cursor < 0 ? c.text.length : cursor);
   }
 }
 

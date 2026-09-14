@@ -19,7 +19,8 @@ import '../core/platform_file_picker.dart';
 /// 混在一起会出问题：用户关掉开关不该删模型（下次开还得重下 378 MB）；
 /// 模型在但会话加载失败也该能重试，而不是显示成"未下载"。
 class AiController extends ChangeNotifier {
-  AiController();
+  AiController({Future<bool>? nativeAvailable})
+      : _nativeAvailable = nativeAvailable;
 
   static const String _kEnabled = 'ai.enabled';
 
@@ -41,6 +42,7 @@ class AiController extends ChangeNotifier {
   AiDownloadState _download = const AiDownloadState(phase: AiDownloadPhase.idle);
   AiNativeSession? _session;
   Completer<void>? _loading;
+  Future<bool>? _nativeAvailable;
 
   bool get enabled => _enabled;
 
@@ -55,7 +57,9 @@ class AiController extends ChangeNotifier {
   bool get modelReady => _downloader?.isInstalled ?? false;
 
   /// 原生库是否存在。不存在时界面要说明"此平台不支持"，而不是让用户白下载。
-  Future<bool>? _nativeAvailable;
+  ///
+  /// 可通过构造参数注入：真实实现要 spawn 一个 isolate 去试探动态库，
+  /// 而界面不该依赖这个时序才能渲染出正确提示（测试里也就能确定性地验证）。
   Future<bool> get nativeAvailable =>
       _nativeAvailable ??= AiNativeSession.nativeAvailable();
 

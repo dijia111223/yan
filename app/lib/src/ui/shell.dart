@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/models.dart';
+import '../state/ai_scope.dart';
 import '../state/workspace.dart';
 import '../state/workspace_scope.dart';
+import 'ai_settings_panel.dart';
 import 'editor_pane.dart';
 import 'file_tree.dart';
 import 'frontmatter_panel.dart';
@@ -138,6 +140,10 @@ class _ShellState extends State<Shell> {
     const SingleActivator(LogicalKeyboardKey.keyB, control: true): const _ToggleSidebarIntent(),
     const SingleActivator(LogicalKeyboardKey.keyP, control: true): const _TogglePreviewIntent(),
     const SingleActivator(LogicalKeyboardKey.keyE, control: true): const _ToggleFrontmatterIntent(),
+    // Ctrl+Shift+A：端侧补全设置。用 Shift 修饰是必须的 ——
+    // 单 Ctrl+A 是编辑器里的全选，抢了会让用户没法全选文本。
+    const SingleActivator(LogicalKeyboardKey.keyA, control: true, shift: true):
+        const _AiSettingsIntent(),
   };
 
   Map<Type, Action<Intent>> _actions(WorkspaceState state) {
@@ -190,12 +196,23 @@ class _ShellState extends State<Shell> {
           return null;
         },
       ),
+      _AiSettingsIntent: CallbackAction<_AiSettingsIntent>(
+        onInvoke: (intent) {
+          final ai = AiScope.maybeOf(context);
+          if (ai != null) AiSettingsPanel.show(context, ai);
+          return null;
+        },
+      ),
     };
   }
 }
 
 class _SaveIntent extends Intent {
   const _SaveIntent();
+}
+
+class _AiSettingsIntent extends Intent {
+  const _AiSettingsIntent();
 }
 
 class _OpenFolderIntent extends Intent {
@@ -397,6 +414,23 @@ class _TopBar extends StatelessWidget {
             _SortDropdown(state: state),
           ],
           const Spacer(),
+          // 端侧补全入口。用 AnimatedBuilder 单独订阅 AI 控制器，
+          // 避免整条顶栏跟着下载进度之类的高频状态重建。
+          if (AiScope.maybeOf(context) != null)
+            AnimatedBuilder(
+              animation: AiScope.maybeOf(context)!,
+              builder: (context, _) {
+                final ai = AiScope.maybeOf(context)!;
+                return _ActionButton(
+                  icon: ai.ready
+                      ? Icons.auto_awesome
+                      : Icons.auto_awesome_outlined,
+                  tooltip: ai.ready ? '端侧补全：已启用' : '端侧补全',
+                  active: ai.enabled,
+                  onPressed: () => AiSettingsPanel.show(context, ai),
+                );
+              },
+            ),
           _ActionButton(
             icon: Icons.search,
             tooltip: narrow ? '搜索' : '搜索 (Ctrl+F)',

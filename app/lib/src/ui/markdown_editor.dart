@@ -17,6 +17,7 @@ class MarkdownEditor extends StatefulWidget {
     required this.selectionColor,
     this.showLineNumbers = true,
     this.padding = const EdgeInsets.fromLTRB(10, 16, 28, 120),
+    this.onChanged,
   });
 
   final MarkdownEditingController controller;
@@ -28,6 +29,12 @@ class MarkdownEditor extends StatefulWidget {
   final Color selectionColor;
   final bool showLineNumbers;
   final EdgeInsets padding;
+
+  /// 文本或光标变化时回调（补全建议用它判断什么时候该问模型）。
+  ///
+  /// 传的是 text 与光标位置而不是整个 TextEditingValue：调用方只需要这两个，
+  /// 而 TextEditingValue 里还有 composing 等只与输入法相关的状态。
+  final void Function(String text, int cursor)? onChanged;
 
   @override
   State<MarkdownEditor> createState() => _MarkdownEditorState();
@@ -96,6 +103,12 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
               // 搜索跳转按行滚动，锚点挂在这个 key 上
               key: widget.controller.editableKey,
               scrollController: _vertical,
+              onChanged: widget.onChanged == null
+                  ? null
+                  : (text) {
+                      final c = widget.controller.selection.baseOffset;
+                      widget.onChanged!(text, c < 0 ? widget.controller.text.length : c);
+                    },
               // Markdown 编辑增强：续列表、补围栏、配对符号、Tab 跳格
               inputFormatters: const <TextInputFormatter>[
                 MarkdownEditAssistFormatter(),

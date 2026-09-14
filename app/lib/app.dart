@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import 'src/core/launch_options.dart';
 import 'src/core/typography.dart';
+import 'src/state/ai_controller.dart';
+import 'src/state/ai_scope.dart';
 import 'src/state/workspace.dart';
 import 'src/state/workspace_scope.dart';
 import 'src/ui/shell.dart';
@@ -21,11 +23,15 @@ class YanApp extends StatefulWidget {
 
 class _YanAppState extends State<YanApp> {
   final WorkspaceState _state = WorkspaceState();
+  final AiController _ai = AiController();
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
+    // 端侧补全的初始化不参与 _ready 判定：它是可选能力，
+    // 探测原生库或读偏好的开销不该拖慢启动画面。
+    _ai.bootstrap();
     _state.bootstrap(launch: widget.launchOptions).whenComplete(() {
       if (mounted) setState(() => _ready = true);
     });
@@ -33,6 +39,7 @@ class _YanAppState extends State<YanApp> {
 
   @override
   void dispose() {
+    _ai.dispose();
     _state.dispose();
     super.dispose();
   }
@@ -70,29 +77,32 @@ class _YanAppState extends State<YanApp> {
 
     return WorkspaceScope(
       state: _state,
-      child: AnimatedBuilder(
-        animation: _state,
-        builder: (context, _) {
-          final doc = _state.activeDocument;
-          return MaterialApp(
-            title: WindowTitle.appName,
-            onGenerateTitle: (context) {
-              // 桌面端窗口标题：文件名 + 库名
-              if (!WindowTitle.supported) return WindowTitle.appName;
-              return WindowTitle.compose(
-                filePath: doc?.path,
-                isDirty: doc?.isDirty ?? false,
-                libraryName: _state.library?.name,
-              );
-            },
-            debugShowCheckedModeBanner: false,
-            theme: _theme(Brightness.light),
-            darkTheme: _theme(Brightness.dark),
-            themeMode: _state.darkMode ? ThemeMode.dark : ThemeMode.light,
-            scrollBehavior: const _DesktopScrollBehavior(),
-            home: const Shell(),
-          );
-        },
+      child: AiScope(
+        controller: _ai,
+        child: AnimatedBuilder(
+          animation: _state,
+          builder: (context, _) {
+            final doc = _state.activeDocument;
+            return MaterialApp(
+              title: WindowTitle.appName,
+              onGenerateTitle: (context) {
+                // 桌面端窗口标题：文件名 + 库名
+                if (!WindowTitle.supported) return WindowTitle.appName;
+                return WindowTitle.compose(
+                  filePath: doc?.path,
+                  isDirty: doc?.isDirty ?? false,
+                  libraryName: _state.library?.name,
+                );
+              },
+              debugShowCheckedModeBanner: false,
+              theme: _theme(Brightness.light),
+              darkTheme: _theme(Brightness.dark),
+              themeMode: _state.darkMode ? ThemeMode.dark : ThemeMode.light,
+              scrollBehavior: const _DesktopScrollBehavior(),
+              home: const Shell(),
+            );
+          },
+        ),
       ),
     );
   }

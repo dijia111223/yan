@@ -71,6 +71,15 @@ dependencies:
   # --- 打开外部链接 ---
   url_launcher: ">=6.2.0 <7.0.0"
 
+  # --- 端侧推理原生库（本地 FFI 插件）---
+  #
+  # 这个路径依赖的**唯一作用**是让 hvigor 把 llama.cpp + 桥接层编成 libyan_ai.so
+  # 并随应用打包（靠插件的 ffiPlugin: true 与 externalNativeOptions）。
+  # Dart 侧的绑定在 lib/src/core/ai_native.dart，不从这个包导入任何东西 ——
+  # 依赖它是为了原生产物，而不是为了 API。
+  yan_ai:
+    path: packages/yan_ai
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

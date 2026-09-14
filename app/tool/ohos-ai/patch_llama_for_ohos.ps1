@@ -39,27 +39,28 @@ function Patch-File([string]$rel, [scriptblock]$transform) {
     $script:changed++
 }
 
-# 1. common.cpp：CPU 亲和性 / 大小核识别（glibc 专有）
-Patch-File 'common\common.cpp' {
-    param($text)
+# 所有守卫补丁共用的替换：给 glibc 专有的守卫加上 !defined(__OHOS__)。
+#
+# 幂等判断必须在**替换之前**，而且判据要用"已经打好的那个串"：
+# 旧串 `...&& !defined(__ANDROID__)` 是打过补丁之后的新串的**前缀**，
+# 直接 Replace 会再次匹配，于是每运行一次就往同一行尾巴上再追加一个
+# `&& !defined(__OHOS__)`。实测跑过 24 次后那行有 25 个重复条件 ——
+# 语义上仍然是对的（重复条件幂等），所以一直没被发现，但源码在悄悄累积垃圾。
+function Add-OhosGuard([string]$text) {
     $old = '#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__)'
-    $new = @'
-// OHOS: 该平台定义了 __linux__ 但没有 glibc 的 pthread_*affinity_np，
-// 与 Android 同样排除（见 patch_llama_for_ohos.ps1）
-#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__) && !defined(__OHOS__)
-'@
-    return $text.Replace($old, $new.TrimEnd("`r","`n"))
+    $new = '#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__) && !defined(__OHOS__)'
+    if ($text.Contains($new)) { return $text }
+    return $text.Replace($old, $new)
 }
 
-# 2. ggml-cpu：同类 CPU 特性探测
-Patch-File 'ggml\src\ggml-cpu\ggml-cpu.cpp' {
-    param($text)
-    $old = '#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__)'
-    $new = @'
-#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__) && !defined(__OHOS__)
-'@
-    return $text.Replace($old, $new.TrimEnd("`r","`n"))
-}
+# 1. common.cpp：CPU 亲和性 / 大小核识别（glibc 专有）
+Patch-File 'common\common.cpp' { param($text) Add-OhosGuard $text }
+
+# 2. ggml-cpu.cpp：同类 CPU 特性探测
+Patch-File 'ggml\src\ggml-cpu\ggml-cpu.cpp' { param($text) Add-OhosGuard $text }
+
+# 3. ggml-cpu.c：affinity 调用也在这个文件里
+Patch-File 'ggml\src\ggml-cpu\ggml-cpu.c' { param($text) Add-OhosGuard $text }
 
 # 3. common/jinja/value.cpp：用了 common_parse_utf8_codepoint，但该函数声明在
 #    common/unicode.h 里，而本文件写的是 #include "unicode.h" ——

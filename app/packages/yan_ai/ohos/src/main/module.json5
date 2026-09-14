@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "yan_ai",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet",
+    ]
+  }
+}

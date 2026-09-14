@@ -87,6 +87,22 @@ Future<String?> ensureOhosLibraryDir() async {
   }
 }
 
+/// 鸿蒙沙箱里存放端侧模型文件的目录。保证存在并返回路径；其他平台返回 null。
+///
+/// 与库目录分开：库是用户笔记所在处，混进一个 378 MB 的二进制文件
+/// 既会出现在文件树里，也会被搜索与导出逻辑扫到。
+Future<String?> ensureOhosModelDir() async {
+  if (kIsWeb || Platform.operatingSystem != 'ohos') return null;
+  try {
+    return await _ohosDirPicker.invokeMethod<String>('modelsDir');
+  } on MissingPluginException {
+    return null;
+  } on PlatformException catch (e) {
+    if (kDebugMode) debugPrint('创建模型目录失败：${e.message}');
+    return null;
+  }
+}
+
 /// 把 [sourcePath] 的内容导出到用户选定的位置（鸿蒙上用系统保存对话框）。
 ///
 /// 返回保存到的位置；用户取消返回 null。

@@ -22,10 +22,12 @@ import { common } from '@kit.AbilityKit';
 const TAG = 'YanDirPicker';
 const CHANNEL = 'dev.yan/dir_picker';
 const IMPORT_SUBDIR = 'yan-library';
+const MODEL_SUBDIR = 'yan-models';
 
 export default class EntryAbility extends FlutterAbility {
   private channel: MethodChannel | null = null;
   private importDir: string = '';
+  private modelDir: string = '';
 
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
@@ -33,6 +35,7 @@ export default class EntryAbility extends FlutterAbility {
 
     const ctx = this.context as common.UIAbilityContext;
     this.importDir = ctx.filesDir + '/' + IMPORT_SUBDIR;
+    this.modelDir = ctx.filesDir + '/' + MODEL_SUBDIR;
 
     this.channel = new MethodChannel(flutterEngine.dartExecutor, CHANNEL);
     this.channel.setMethodCallHandler({
@@ -54,6 +57,19 @@ export default class EntryAbility extends FlutterAbility {
           } catch (err) {
             Log.e(TAG, 'ensureLibraryDir failed: ' + JSON.stringify(err))
             result.error('MKDIR_FAILED', '创建库目录失败：' + (err?.message ?? ''), null)
+          }
+        } else if (call.method === 'modelsDir') {
+          // 模型下载到沙箱内的独立目录。
+          // 为什么不放库目录：库是用户笔记所在处，混进一个 378 MB 的二进制文件
+          // 既会出现在文件树里，也会被导出/搜索逻辑扫到。
+          try {
+            if (!fs.accessSync(this.modelDir)) {
+              fs.mkdirSync(this.modelDir);
+            }
+            result.success(this.modelDir);
+          } catch (err) {
+            Log.e(TAG, 'modelsDir failed: ' + JSON.stringify(err))
+            result.error('MKDIR_FAILED', '创建模型目录失败：' + (err?.message ?? ''), null)
           }
         } else {
           result.notImplemented()

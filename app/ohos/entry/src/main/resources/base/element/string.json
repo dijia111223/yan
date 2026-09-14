@@ -11,6 +11,10 @@
                    {
                        "name":  "EntryAbility_label",
                        "value":  "砚"
+                   },
+                   {
+                       "name":  "reason_internet",
+                       "value":  "下载端侧补全所需的模型文件；笔记内容不会上传"
                    }
                ]
 }

@@ -33,9 +33,25 @@
         ]
       }
     ],
-    // 不申请任何权限：砚是纯本地编辑器，不联网、不读通讯录、不定位。
-    // 模板默认带的 ohos.permission.INTERNET 已移除（代码里没有任何网络调用），
-    // 上架时多余权限会被审核追问。
-    "requestPermissions": []
+    // 只申请网络权限，而且**只用于下载端侧补全用的模型文件**。
+    //
+    // 砚本身仍然是不联网的本地编辑器：笔记读写全在沙箱或用户选定目录，
+    // 没有任何遥测、账号或云同步。首次启用"智能补全"时才去取一次模型
+    // （约 378 MB），之后推理完全在设备本地进行，不再联网。
+    //
+    // 模型不打进安装包也是同一个考虑：塞进去会让 HAP 体积失控，
+    // 而多数用户并不需要这个功能。
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET",
+        "reason": "$string:reason_internet",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      }
+    ]
   }
 }

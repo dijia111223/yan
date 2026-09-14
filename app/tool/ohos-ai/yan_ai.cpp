@@ -53,14 +53,19 @@ Session *  g_session = nullptr;
 volatile bool g_cancel = false;
 double g_last_repeat_ratio = 0.0;   // 供诊断：为什么触发/未触发复读检测
 
+// 需要带上具体路径的错误信息在这里拼。
+// YanAiError::message 是 const char *（约定指向静态存储），所以这个缓冲必须是
+// 静态生命周期 —— 指回栈上的局部数组会立刻变成悬垂指针。
+char g_err_buf[256] = { 0 };
+
 }  // namespace
 
 extern "C" {
 
 int yan_ai_load(const char * model_path, const YanAiConfig * cfg, YanAiError * err) {
-    if (err) { err->code = 0; err->message[0] = '\0'; }
+    if (err) { err->code = 0; err->message = ""; }
     if (model_path == nullptr) {
-        if (err) { err->code = 1; snprintf(err->message, sizeof(err->message), "模型路径为空"); }
+        if (err) { err->code = 1; err->message = "模型路径为空"; }
         return 1;
     }
 
@@ -77,7 +82,11 @@ int yan_ai_load(const char * model_path, const YanAiConfig * cfg, YanAiError * e
 
     llama_model * model = llama_model_load_from_file(model_path, mparams);
     if (model == nullptr) {
-        if (err) { err->code = 2; snprintf(err->message, sizeof(err->message), "模型加载失败：%s", model_path); }
+        if (err) {
+            err->code = 2;
+            snprintf(g_err_buf, sizeof(g_err_buf), "模型加载失败：%s", model_path);
+            err->message = g_err_buf;
+        }
         return 2;
     }
 
@@ -90,7 +99,7 @@ int yan_ai_load(const char * model_path, const YanAiConfig * cfg, YanAiError * e
     llama_context * ctx = llama_init_from_model(model, cparams);
     if (ctx == nullptr) {
         llama_model_free(model);
-        if (err) { err->code = 3; snprintf(err->message, sizeof(err->message), "上下文创建失败"); }
+        if (err) { err->code = 3; err->message = "上下文创建失败"; }
         return 3;
     }
 
@@ -161,11 +170,13 @@ static bool detect_repeat(const std::string & s, double * ratio_out = nullptr) {
     return total >= 6 && ratio >= 0.75;
 }
 
-int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_token,
-                    void * user, YanAiError * err) {
-    if (err) { err->code = 0; err->message[0] = '\0'; }
+int yan_ai_complete(const char * prefix, const YanAiParams * p,
+                    char * out_buf, int out_cap,
+                    YanAiTokenFn on_token, void * user, YanAiError * err) {
+    if (err) { err->code = 0; err->message = ""; }
+    if (out_buf != nullptr && out_cap > 0) out_buf[0] = '\0';
     if (g_session == nullptr) {
-        if (err) { err->code = 10; snprintf(err->message, sizeof(err->message), "模型未加载"); }
+        if (err) { err->code = 10; err->message = "模型未加载"; }
         return 10;
     }
     if (prefix == nullptr) prefix = "";
@@ -200,7 +211,7 @@ int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_
                                tokens.data(), (int) tokens.size(), true, false);
     }
     if (n_tok <= 0) {
-        if (err) { err->code = 11; snprintf(err->message, sizeof(err->message), "分词失败"); }
+        if (err) { err->code = 11; err->message = "分词失败"; }
         return 11;
     }
     tokens.resize(n_tok);
@@ -213,18 +224,20 @@ int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_
     }
 
     if (llama_decode(s->ctx, llama_batch_get_one(tokens.data(), n_tok)) != 0) {
-        if (err) { err->code = 12; snprintf(err->message, sizeof(err->message), "prefill 失败"); }
+        if (err) { err->code = 12; err->message = "prefill 失败"; }
         return 12;
     }
 
-    // 停止串分两类，按光标所在行的形态选：
+    // 停止串按光标所在行的形态选。判据用行的开头字符，比整段前缀更贴合意图。
     //
-    // - 结构化行（表格 / 列表 / 引用 / 标题）：下一个换行就是天然边界，
-    //   一个建议补一行正好。
-    // - 普通段落：靠换行收尾会让建议长到没法用，应该在**句子边界**收，
-    //   给"半句话"的续写才有意义。
+    // - **结构化行**（表格 / 列表 / 引用 / 标题）：下一个换行就是边界，一条建议补一行。
+    //   试过对表格改以 `|` 为界 —— 模型在 ` Linux | 已发布 |` 的第一个竖线就命中，
+    //   只得到 ` Linux`，真实内容被截掉，所以表格也用换行。
+    // - **普通段落**：靠换行收尾会让建议长到没法用，应在句子边界收。
     //
-    // 判据用光标所在行（前缀最后一行）的开头字符，比整段前缀更贴合意图。
+    // 注意实测的一点：0.6B 写表格行时**经常不输出行尾的 `|`**，
+    // 于是建议是个残缺的表格行。提示工程没能稳定修好它，
+    // 所以改在上层做建议校验（见 Dart 侧的 suggestionLooksValid）。
     const size_t last_nl = text.rfind('\n');
     const std::string cur_line = (last_nl == std::string::npos) ? text : text.substr(last_nl + 1);
     const bool structured = !cur_line.empty() &&
@@ -239,7 +252,11 @@ int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_
         stops = { "\n", "。", "！", "？", "；", "…" };
     }
 
+    // 已确认属于最终结果、可以交付给调用方的文本。
     std::string out;
+    // 刚生成、尚未确认的片段。停止串可能跨在它与前文之间，所以先押一步。
+    std::string pending;
+    bool cancelled_by_callback = false;
     StopReason reason = StopReason::MaxTokens;
     int n_gen = 0;
 
@@ -252,7 +269,7 @@ int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_
         char buf[256];
         const int n = llama_token_to_piece(s->vocab, tok, buf, sizeof(buf), 0, false);
         if (n > 0) {
-            out.append(buf, n);
+            pending.append(buf, n);
             n_gen++;
         }
 
@@ -261,22 +278,34 @@ int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_
             break;
         }
 
-        // 先回调再判定停止串。
-        // 反过来写会出现"已经吐给调用方的字符又被截掉"的不一致 ——
-        // 实测表现为表格续写丢了行尾的 `|`。
-        if (on_token != nullptr && n > 0) {
-            if (on_token(buf, n, user) != 0) { reason = StopReason::Cancelled; break; }
-        }
-
         // 停止串：没有它生成会一路跑到上限，延迟不可控。
-        // 排除"命中在开头"的情形 —— 那说明停止串属于本轮已生成内容的一部分边界，
-        // 不是该截断的地方。
+        //
+        // 判据是"把 pending 并进来之后会不会出现停止串"：
+        // 若会，说明 pending 正是边界那一段，不并入、直接收工。
+        // 反过来（先并入再查）多发一个 token 才停，`\n` 这种单字符停止串会多带一个换行。
+        const std::string merged = out + pending;
         bool hit = false;
         for (const std::string & st : stops) {
-            const size_t pos = out.find(st);
-            if (pos != std::string::npos && pos > 0) { out.resize(pos); hit = true; break; }
+            if (merged.find(st) != std::string::npos) { hit = true; break; }
         }
-        if (hit) { reason = StopReason::StopString; break; }
+        if (hit && !out.empty()) { reason = StopReason::StopString; break; }
+
+        // 这一步没有命中停止串，前面的 pending 才算数。
+        //
+        // 为什么押这一步：回调与 out 缓冲必须给出**完全一样**的文本。
+        // 先前是"立刻回调、之后才按停止串截断 out"，结果两者长度不同 ——
+        // 停止串会落在已经吐出去的那部分里，调用方看到的比真值多。
+        if (!pending.empty()) {
+            out += pending;
+            if (on_token != nullptr) {
+                if (on_token(pending.data(), (int) pending.size(), user) != 0) {
+                    cancelled_by_callback = true;
+                    reason = StopReason::Cancelled;
+                    break;
+                }
+            }
+            pending.clear();
+        }
 
         // 复读检测每 4 个 token 跑一次：它要遍历整段输出，每步都跑是浪费；
         // 而漏检 3 个 token 对补全没有影响。
@@ -287,7 +316,21 @@ int yan_ai_complete(const char * prefix, const YanAiParams * p, YanAiTokenFn on_
         }
     }
 
-    if (err) snprintf(err->message, sizeof(err->message), "%s", stop_reason_name(reason));
+    // 回调主动取消时，那段尚未交付的内容要算进结果里 —— 回调已经看到它了
+    if (cancelled_by_callback && !pending.empty()) {
+        out += pending;
+        pending.clear();
+    }
+
+    // 把结果交给调用方。缓冲区由调用方提供，保证 NUL 结尾；
+    // 截断时保留边界（宁可少给几个字，也不能写出界）。
+    if (out_buf != nullptr && out_cap > 0) {
+        const int n = (int) out.size() < out_cap - 1 ? (int) out.size() : out_cap - 1;
+        if (n > 0) memcpy(out_buf, out.data(), (size_t) n);
+        out_buf[n > 0 ? n : 0] = '\0';
+    }
+
+    if (err) err->message = stop_reason_name(reason);
     return (int) reason;
 }
 

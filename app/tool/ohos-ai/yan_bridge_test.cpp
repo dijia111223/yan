@@ -1,4 +1,4 @@
-﻿// 桥接层（yan_ai.h）的设备端验证程序。
+// 桥接层（yan_ai.h）的设备端验证程序。
 //
 // 探针只验证"llama.cpp 能跑"，这个验证"应用要用的 C 接口能用"：
 // 模型只加载一次、连续多次补全、停止串与复读检测是否真的按预期终止。
@@ -26,13 +26,28 @@ static int run_case(const char * label, const char * prefix, int max_tokens) {
     p.max_tokens = max_tokens;
 
     YanAiError err;
-    std::string out;
+    std::string streamed;
     printf("输出: ");
     fflush(stdout);
 
-    const int rc = yan_ai_complete(prefix, &p, on_piece, &out, &err);
+    // 同时走回调和 out 缓冲两条路，顺便确认两者结果一致
+    char out[4096];
+    const int rc = yan_ai_complete(prefix, &p, out, (int) sizeof(out),
+                                   on_piece, &streamed, &err);
     printf("\n[停止原因] %s (rc=%d)\n", err.message, rc);
-    printf("[本轮字节数] %d    [复读度量] %.2f\n", (int) out.size(), yan_ai_last_repeat_ratio());
+    printf("[回调与缓冲一致] %s\n", streamed == out ? "是" : "否");
+    printf("[字节数] %d    [复读度量] %.2f\n", (int) streamed.size(),
+           yan_ai_last_repeat_ratio());
+    // 逐字节转义打印：行尾到底是换行还是竖线，肉眼在终端里分不出来
+    printf("[字节明细] ");
+    for (unsigned char c : streamed) {
+        if (c == '\n') printf("\\n");
+        else if (c == '\r') printf("\\r");
+        else if (c == '\t') printf("\\t");
+        else if (c < 0x20) printf("\\x%02x", c);
+        else putchar(c);
+    }
+    printf("|\n");
     return rc;
 }
 

@@ -359,24 +359,52 @@ Signal 6
 3. **必须异步 + 可取消** —— 用户继续打字时，在途的推理要能作废
 4. **模型只加载一次** —— 378 MB 的模型每次补全都重载是不可接受的（桥接层已实现会话复用）
 
-### 7.1 集成路径（已验证可行）
+### 7.1 集成路径（已实现）
 
 ```
-FFI 插件（HAR）
-  └─ build-profile.json5: buildOption.externalNativeOptions.path = "../src/CMakeLists.txt"
+packages/yan_ai（本地 FFI 插件，HAR）
+  └─ ohos/build-profile.json5
+       buildOption.externalNativeOptions.path = "../src/CMakeLists.txt"
        └─ hvigor 用 DevEco SDK 官方 ohos.toolchain.cmake 调 CMake
-            └─ libyan_ai.so（AArch64，11.5 MB，导出 5 个 yan_ai_* 符号）
+            └─ libyan_ai.so（AArch64，11.5 MB，导出 6 个 yan_ai_* 符号）
                  └─ Dart: DynamicLibrary.open('libyan_ai.so')
 ```
 
-CMake 路径实测通过：配置 1–2 秒、265 个源文件全部编过、产出 AArch64 共享库。
-`plugin_ffi` 的 Dart 模板里 `Platform.isOhos` 分支是现成的，不需要自造。
+实测：265 个源文件全部编过、链接成功、符号齐全。
+
+插件的职责**故意做得很窄**：只负责编出并打包原生库。Dart 绑定与 isolate
+留在应用侧（`lib/src/core/ai_native.dart`）—— 把推理放进独立 isolate、
+支持跨线程取消，这些涉及 UI 时序，属于应用逻辑。
+
+`src/vendor/llama.cpp` 是上游快照（不含 `.git`）。OHOS 需要的四处改动由
+`src/CMakeLists.txt` 在**配置阶段自动完成**（读文件 → 按标记判断 → 字符串替换）。
+
+**为什么不用 git apply**：它在本机很脆 —— 补丁 LF、工作区 CRLF 时会错位，
+实测把两行合成一行、把 `#include` 揉进注释，而报错指向别处。判断"是否已应用"
+也不能用 `git --reverse --check`：那是拿**当前工作目录**去比，源码另有拷贝时
+会误判（实测 CMake 报"已应用"而 vendored 源码一行没改）。
+
+四处补丁，前两处是编译期错误，后两处只在**链接期**才暴露：
+
+| 文件 | 改什么 | 不打的后果 |
+|---|---|---|
+| `common/common.cpp` | 两处 `__x86_64__ && __linux__` 守卫排除 OHOS | 编译报 `pthread_getaffinity_np` 未声明 |
+| `ggml-cpu.c` | `ggml_get_numa_affinity` / `set_numa_thread_affinity` 的 `__gnu_linux__` 守卫排除 OHOS | 同上 |
+| `ggml-cpu.c` | `ggml_thread_apply_affinity` 把 OHOS 并入 `__ANDROID__` 分支 | 链接报 `undefined symbol: pthread_setaffinity_np` |
+| `common/jinja/value.cpp` | 补 `#include "../unicode.h"` | 编译报 `common_parse_utf8_codepoint` 未声明 |
+
+第三处的坑值得单独记：OHOS 的 clang **会**定义 `__gnu_linux__`，所以那些用
+glibc 专有 API 的代码块会被启用；而 OHOS 的 sysroot 只提供 `sched_setaffinity`
+（Android 那支用的就是它）。**这类问题编译期不报错，只在链接期报缺符号。**
 
 ### 7.2 还没做的
 
-- **Dart FFI 绑定**与编辑器集成（补全建议的 UI 呈现、接受/忽略交互）
-- **模型分发**：378 MB 不适合打进 HAP，需要"首次启动下载"或"用户导入"流程
 - **真机验证**：本机只有 x86_64 模拟器，ARM64 真机的速度与内存未实测
+- **端到端跑通推理**：插件能编出 `.so`，但**还没有在装了这个 HAP 的模拟器上
+  真正加载模型跑一次补全**。下一步是验证 `DynamicLibrary.open('libyan_ai.so')`
+  在应用里能成功。
 - **内存评估**：485 MB 峰值在中低端机上是否可接受，需要真机确认
+- **模型分发已实现但未走通**：下载器（断点续传 + SHA-256 校验）与界面都有，
+  但因为上一条，还没在真机上完整下过一次
 
 
